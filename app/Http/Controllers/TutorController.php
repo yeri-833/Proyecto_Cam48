@@ -8,7 +8,10 @@ use App\Services\TelegramService;
 use App\Mail\InvitacionTelegramMail;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver;
 
 class TutorController extends Controller
 {
@@ -31,7 +34,7 @@ class TutorController extends Controller
                   });
         }
 
-        $tutores = $query->orderBy('t1_nombre', 'asc')->get();
+        $tutores = $query->orderBy('t1_nombre', 'asc')->paginate(15)->withQueryString();
         $alumnosDisponibles = Alumno::where('activo', 1)->orderBy('nombre')->get();
 
         return Inertia::render('Tutores/Index', [
@@ -66,10 +69,19 @@ class TutorController extends Controller
         $tutorExistente = Tutor::where('matricula_alumno', $validated['matricula_alumno'])->first();
 
         if ($request->hasFile('t1_foto_perfil')) {
-            if ($tutorExistente && $tutorExistente->t1_foto_perfil && \Illuminate\Support\Facades\Storage::disk('public')->exists($tutorExistente->t1_foto_perfil)) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($tutorExistente->t1_foto_perfil);
+            if ($tutorExistente && $tutorExistente->t1_foto_perfil && Storage::disk('public')->exists($tutorExistente->t1_foto_perfil)) {
+                Storage::disk('public')->delete($tutorExistente->t1_foto_perfil);
             }
-            $data['t1_foto_perfil'] = $request->file('t1_foto_perfil')->store('fotos/tutores', 'public');
+            
+            $manager = new ImageManager(new Driver());
+            $image = $manager->read($request->file('t1_foto_perfil')->getRealPath());
+            $image->scaleDown(width: 800);
+            $encoded = $image->toJpeg(quality: 80);
+            
+            $filename = 'fotos/tutores/' . uniqid() . '.jpg';
+            Storage::disk('public')->put($filename, $encoded->toString());
+            
+            $data['t1_foto_perfil'] = $filename;
         }
 
         if ($tutorExistente) {
@@ -89,6 +101,8 @@ class TutorController extends Controller
      */
     public function destroy($id)
     {
+        \Illuminate\Support\Facades\Gate::authorize('eliminar-registros');
+
         $tutor = Tutor::findOrFail($id);
         $tutor->delete();
 

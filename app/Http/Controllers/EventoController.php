@@ -92,6 +92,8 @@ class EventoController extends Controller
      */
     public function destroy($id)
     {
+        \Illuminate\Support\Facades\Gate::authorize('eliminar-registros');
+
         $evento = Evento::findOrFail($id);
         $evento->delete();
 

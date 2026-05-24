@@ -29,7 +29,7 @@ class ExpedienteController extends Controller
                   });
         }
         
-        $archivos = $query->orderBy('fecha_subida', 'desc')->get()->map(function($archivo) {
+        $archivos = $query->orderBy('fecha_subida', 'desc')->paginate(15)->through(function($archivo) {
             $archivo->url = asset('storage/expedientes/' . $archivo->nombre_servidor);
             $archivo->fecha_formateada = Carbon::parse($archivo->fecha_subida)->format('d/m/Y h:i A');
             // Convertir bytes a formato legible
@@ -44,7 +44,7 @@ class ExpedienteController extends Controller
             return $archivo;
         });
 
-        $alumnos = Alumno::where('activo', 1)->orderBy('nombre')->get();
+        $alumnos = Alumno::where('activo', 1)->orderBy('nombre')->get(); // This is for the modal select dropdown, we need them all for the dropdown.
 
         return Inertia::render('Expedientes/Index', [
             'archivos' => $archivos,
@@ -91,6 +91,8 @@ class ExpedienteController extends Controller
      */
     public function destroy($id)
     {
+        \Illuminate\Support\Facades\Gate::authorize('eliminar-registros');
+
         $archivo = ArchivoSistema::findOrFail($id);
         
         if (Storage::disk('public')->exists('expedientes/' . $archivo->nombre_servidor)) {

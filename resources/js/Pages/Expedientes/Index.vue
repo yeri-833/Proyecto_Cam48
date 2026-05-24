@@ -5,7 +5,7 @@ import { ref, watch } from 'vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
-    archivos: Array,
+    archivos: Object,
     alumnos: Array,
     filtros: Object
 });
@@ -131,6 +131,7 @@ const getIconForMime = (mime) => {
     if (mime.includes('zip') || mime.includes('rar')) return 'fa-file-archive text-amber-500';
     return 'fa-file-alt text-slate-500';
 };
+import Pagination from '@/Components/Pagination.vue';
 </script>
 
 <template>
@@ -216,7 +217,7 @@ const getIconForMime = (mime) => {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="archivo in archivos" :key="archivo.id" class="group">
+                            <tr v-for="archivo in archivos.data" :key="archivo.id" class="group">
                                 <td>
                                     <div class="flex items-center gap-4">
                                         <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center text-xl shrink-0 shadow-sm border border-slate-200/50 dark:border-slate-600/50">
@@ -249,7 +250,7 @@ const getIconForMime = (mime) => {
                                     </div>
                                 </td>
                             </tr>
-                            <tr v-if="archivos.length === 0">
+                            <tr v-if="archivos.data.length === 0">
                                 <td colspan="4">
                                     <div class="empty-state">
                                         <div class="empty-state-icon">
@@ -261,6 +262,10 @@ const getIconForMime = (mime) => {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+                <!-- Pagination -->
+                <div class="p-4 border-t border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30">
+                    <Pagination :links="archivos.links" />
                 </div>
             </div>
         </div>

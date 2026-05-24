@@ -5,7 +5,7 @@ import { ref, watch } from 'vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
-    tutores: Array,
+    tutores: Object,
     alumnos: Array,
     filtros: Object
 });
@@ -61,8 +61,10 @@ const enviarMensaje = () => {
                 title: '¡Enviado!',
                 text: 'El mensaje ha sido enviado por Telegram exitosamente.',
                 icon: 'success',
-                confirmButtonColor: '#0ea5e9',
-                customClass: { popup: 'rounded-3xl', confirmButton: 'rounded-xl font-bold px-6 py-3' }
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000
             });
         }
     });
@@ -88,8 +90,10 @@ const enviarInvitacion = (tutor) => {
                         title: '¡Enviado!',
                         text: 'El correo electrónico ha sido despachado.',
                         icon: 'success',
-                        confirmButtonColor: '#0ea5e9',
-                        customClass: { popup: 'rounded-3xl', confirmButton: 'rounded-xl font-bold px-6 py-3' }
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3000
                     });
                 }
             });
@@ -120,11 +124,10 @@ const guardarTutor = () => {
                 title: '¡Guardado!',
                 text: 'La información del tutor ha sido actualizada.',
                 icon: 'success',
-                confirmButtonColor: '#009FE3',
-                customClass: {
-                    popup: 'rounded-3xl',
-                    confirmButton: 'rounded-xl font-bold px-6 py-3'
-                }
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000
             });
         }
     });
@@ -151,6 +154,7 @@ const eliminarTutor = (id) => {
         }
     });
 };
+import Pagination from '@/Components/Pagination.vue';
 </script>
 
 <template>
@@ -198,7 +202,7 @@ const eliminarTutor = (id) => {
                             </tr>
                         </thead>
                         <tbody v-auto-animate>
-                            <tr v-for="tutor in tutores" :key="tutor.id" class="group">
+                            <tr v-for="tutor in tutores.data" :key="tutor.id" class="group">
                                 <td>
                                     <div class="flex items-center gap-3">
                                         <div v-if="tutor.t1_foto_perfil" class="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-sm shrink-0">
@@ -248,7 +252,7 @@ const eliminarTutor = (id) => {
                                     </div>
                                 </td>
                             </tr>
-                            <tr v-if="tutores.length === 0">
+                            <tr v-if="tutores.data.length === 0">
                                 <td colspan="4">
                                     <div class="empty-state">
                                         <div class="empty-state-icon">
@@ -260,6 +264,10 @@ const eliminarTutor = (id) => {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+                <!-- Pagination -->
+                <div class="p-4 border-t border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30">
+                    <Pagination :links="tutores.links" />
                 </div>
             </div>
         </div>
@@ -295,7 +303,7 @@ const eliminarTutor = (id) => {
                         
                         <div>
                             <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Nombre Completo del Tutor</label>
-                            <input type="text" v-model="form.t1_nombre" required class="input-premium w-full text-sm uppercase" placeholder="Ej. JUAN PÉREZ">
+                            <input type="text" v-model="form.t1_nombre" required autofocus class="input-premium w-full text-sm uppercase" placeholder="Ej. JUAN PÉREZ">
                             <p v-if="form.errors.t1_nombre" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.t1_nombre }}</p>
                         </div>
 
@@ -365,7 +373,7 @@ const eliminarTutor = (id) => {
                     <div class="space-y-4">
                         <div>
                             <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Escribe tu mensaje</label>
-                            <textarea v-model="formMensaje.mensaje" required rows="4" class="input-premium w-full text-sm resize-none" placeholder="Escriba aquí el comunicado para el padre o tutor..."></textarea>
+                            <textarea v-model="formMensaje.mensaje" required autofocus rows="4" class="input-premium w-full text-sm resize-none" placeholder="Escriba aquí el comunicado para el padre o tutor..."></textarea>
                             <p v-if="formMensaje.errors.mensaje" class="text-red-500 text-xs font-bold mt-1">{{ formMensaje.errors.mensaje }}</p>
                             <p class="text-xs font-bold text-slate-400 mt-2"><i class="fas fa-info-circle"></i> El mensaje se enviará instantáneamente por Telegram.</p>
                         </div>
@@ -375,7 +383,10 @@ const eliminarTutor = (id) => {
                         <button type="button" @click="mostrarModalMensaje = false" class="btn-ghost">Cancelar</button>
                         <button type="submit" :disabled="formMensaje.processing || !tutorSeleccionado?.t1_telegram_chat_id" class="btn-premium flex items-center justify-center gap-2" style="background: linear-gradient(135deg, #0ea5e9, #0284c7); box-shadow: 0 8px 24px -6px rgba(14, 165, 233, 0.4);">
                             <span v-if="!tutorSeleccionado?.t1_telegram_chat_id">Sin Telegram vinculado</span>
-                            <span v-else>Enviar Mensaje <i class="fas fa-paper-plane"></i></span>
+                            <span v-else>
+                                <i class="fas fa-spinner fa-spin mr-2" v-if="formMensaje.processing"></i>
+                                Enviando... <i class="fas fa-paper-plane" v-if="!formMensaje.processing"></i>
+                            </span>
                         </button>
                     </div>
                 </form>

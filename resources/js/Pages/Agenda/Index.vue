@@ -42,8 +42,10 @@ const guardarEvento = () => {
                 title: '¡Guardado!',
                 text: 'El evento se ha agendado exitosamente.',
                 icon: 'success',
-                confirmButtonColor: '#009FE3',
-                customClass: { popup: 'rounded-3xl', confirmButton: 'rounded-xl font-bold px-6 py-3' }
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000
             });
         }
     });
@@ -90,7 +92,7 @@ const cancelarEvento = (id) => {
                     <p class="text-slate-500 dark:text-slate-400 font-bold text-sm mt-1">Próximos eventos, reuniones y suspensiones de clases.</p>
                 </div>
                 
-                <button @click="abrirModalNuevo" class="bg-primary hover:bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-black text-sm shadow-md shadow-primary/20 transition-all flex items-center gap-2">
+                <button @click="abrirModalNuevo" class="btn-premium">
                     <i class="fas fa-calendar-plus"></i> Nuevo Evento
                 </button>
             </div>
@@ -138,11 +140,11 @@ const cancelarEvento = (id) => {
                                     
                                     <!-- Floating Actions -->
                                     <div class="flex gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                                        <button @click="abrirModalEditar(evento)" class="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-primary/10 text-slate-400 hover:text-primary transition-all duration-200 flex items-center justify-center">
-                                            <i class="fas fa-edit text-xs"></i>
+                                        <button @click="abrirModalEditar(evento)" class="table-action-btn bg-slate-50 dark:bg-slate-700/50 hover:bg-primary/10 text-slate-400 dark:text-slate-500 hover:text-primary dark:hover:text-primary transition-all duration-200 flex items-center justify-center" v-tippy="'Editar Evento'">
+                                            <i class="fas fa-edit"></i>
                                         </button>
-                                        <button @click="cancelarEvento(evento.id)" class="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all duration-200 flex items-center justify-center">
-                                            <i class="fas fa-trash-alt text-xs"></i>
+                                        <button @click="cancelarEvento(evento.id)" class="table-action-btn bg-slate-50 dark:bg-slate-700/50 hover:bg-red-50 text-slate-400 dark:text-slate-500 hover:text-red-500 transition-all duration-200 flex items-center justify-center" v-tippy="'Cancelar Evento'">
+                                            <i class="fas fa-trash-alt"></i>
                                         </button>
                                     </div>
                                 </div>
@@ -170,46 +172,52 @@ const cancelarEvento = (id) => {
         </div>
 
         <!-- Modal Formulario -->
-        <div v-if="mostrarModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" @click="mostrarModal = false"></div>
-            
-            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md z-10 overflow-hidden animate-fade-in-up border border-slate-100">
-                <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 class="font-black text-slate-800 text-lg font-display">{{ modoEdicion ? 'Editar Evento' : 'Agendar Evento' }}</h3>
-                    <button @click="mostrarModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
-                        <i class="fas fa-times text-lg"></i>
-                    </button>
-                </div>
+        <Transition enter-active-class="transition-opacity duration-300" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition-opacity duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0">
+            <div v-if="mostrarModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="mostrarModal = false"></div>
                 
-                <form @submit.prevent="guardarEvento" class="p-6">
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Título del Evento</label>
-                            <input type="text" v-model="form.nombre_evento" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all uppercase" placeholder="Ej. REUNIÓN DE TUTORES">
-                            <p v-if="form.errors.nombre_evento" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.nombre_evento }}</p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Fecha y Hora</label>
-                            <input type="datetime-local" v-model="form.fecha_hora" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all">
-                            <p v-if="form.errors.fecha_hora" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.fecha_hora }}</p>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Ubicación (Opcional)</label>
-                            <input type="text" v-model="form.ubicacion" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all" placeholder="Ej. Patio Central">
-                            <p v-if="form.errors.ubicacion" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.ubicacion }}</p>
-                        </div>
-                    </div>
-                    
-                    <div class="mt-8">
-                        <button type="submit" :disabled="form.processing" class="w-full bg-primary hover:bg-blue-600 text-white py-3.5 rounded-xl font-black shadow-md shadow-primary/20 transition-all disabled:opacity-50">
-                            {{ modoEdicion ? 'Actualizar Evento' : 'Guardar en Agenda' }}
+                <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md w-full max-w-md rounded-3xl shadow-2xl z-10 relative overflow-hidden border border-white/20 dark:border-slate-700/50" @click.stop>
+                    <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary to-secondary"></div>
+                    <div class="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+                        <h3 class="font-black text-slate-800 dark:text-white text-xl font-display tracking-tight">{{ modoEdicion ? 'Editar Evento' : 'Agendar Evento' }}</h3>
+                        <button @click="mostrarModal = false" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors" v-tippy="'Cerrar'">
+                            <i class="fas fa-times"></i>
                         </button>
                     </div>
-                </form>
+                    
+                    <div class="p-6">
+                        <form @submit.prevent="guardarEvento">
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Título del Evento</label>
+                                    <input type="text" v-model="form.nombre_evento" required autofocus class="input-premium w-full text-sm uppercase" placeholder="Ej. REUNIÓN DE TUTORES">
+                                    <p v-if="form.errors.nombre_evento" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.nombre_evento }}</p>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Fecha y Hora</label>
+                                    <input type="datetime-local" v-model="form.fecha_hora" required class="input-premium w-full text-sm">
+                                    <p v-if="form.errors.fecha_hora" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.fecha_hora }}</p>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Ubicación (Opcional)</label>
+                                    <input type="text" v-model="form.ubicacion" class="input-premium w-full text-sm" placeholder="Ej. Patio Central">
+                                    <p v-if="form.errors.ubicacion" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.ubicacion }}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-8 flex justify-end gap-3">
+                                <button type="button" @click="mostrarModal = false" class="btn-secondary">Cancelar</button>
+                                <button type="submit" :disabled="form.processing" class="btn-premium">
+                                    <i class="fas fa-spinner fa-spin mr-2" v-if="form.processing"></i> {{ modoEdicion ? 'Actualizar Evento' : 'Guardar en Agenda' }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
-        </div>
+        </Transition>
 
     </AuthenticatedLayout>
 </template>

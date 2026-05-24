@@ -5,7 +5,7 @@ import { ref, computed, onMounted } from 'vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
-    personal: Array,
+    personal: Object,
 });
 
 const busqueda = ref('');
@@ -27,9 +27,9 @@ const form = useForm({
 });
 
 const personalFiltrado = computed(() => {
-    if (!busqueda.value) return props.personal;
+    if (!busqueda.value) return props.personal.data;
     const q = busqueda.value.toLowerCase();
-    return props.personal.filter(p =>
+    return props.personal.data.filter(p =>
         p.nombre_completo.toLowerCase().includes(q) ||
         p.id.toLowerCase().includes(q) ||
         (p.categoria && p.categoria.toLowerCase().includes(q))
@@ -185,6 +185,7 @@ const enviarInvitacion = (p) => {
         }
     });
 };
+import Pagination from '@/Components/Pagination.vue';
 </script>
 
 <template>
@@ -274,6 +275,10 @@ const enviarInvitacion = (p) => {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+                <!-- Pagination -->
+                <div class="p-4 border-t border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30">
+                    <Pagination :links="personal.links" />
                 </div>
             </div>
         </div>

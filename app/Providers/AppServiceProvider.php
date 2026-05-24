@@ -21,5 +21,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+
+        \Illuminate\Support\Facades\Gate::define('eliminar-registros', function ($user) {
+            return $user->role === 'admin';
+        });
     }
 }

@@ -15,6 +15,9 @@ Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'inde
 Route::put('/alumnos/{matricula}', [App\Http\Controllers\DashboardController::class, 'updateAlumno'])
     ->middleware(['auth'])->name('alumnos.update');
 
+Route::post('/alumnos', [App\Http\Controllers\DashboardController::class, 'storeAlumno'])
+    ->middleware(['auth'])->name('alumnos.store');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -53,7 +56,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/tutores/{id}', [App\Http\Controllers\TutorController::class, 'destroy'])->name('tutores.destroy');
     
     // Background Sync (Telegram)
-    Route::get('/api/telegram/sync', [App\Http\Controllers\TutorController::class, 'syncTelegram'])->name('telegram.sync');
+    Route::get('/api/telegram/sync', [App\Http\Controllers\TutorController::class, 'syncTelegram'])
+        ->middleware('throttle:30,1')->name('telegram.sync');
 
     // Expediente Digital de Alumnos
     Route::get('/expedientes', [App\Http\Controllers\ExpedienteController::class, 'index'])->name('expedientes.index');

@@ -253,9 +253,9 @@
   }
   
   html.dark .input-premium {
-    background: rgba(15, 23, 42, 0.6); /* bg-slate-900/60 */
-    border-color: #334155; /* slate-700 */
-    color: #f1f5f9; /* slate-100 */
+    background: rgba(30, 41, 59, 0.6); /* bg-slate-800/60 */
+    border-color: #475569; /* slate-600 */
+    color: #f8fafc; /* slate-50 */
   }
 
   .input-premium::placeholder {
@@ -264,7 +264,8 @@
   }
   
   html.dark .input-premium::placeholder {
-    color: #64748b; /* slate-500 */
+    color: #94a3b8; /* slate-400 for better contrast */
+    opacity: 0.8;
   }
 
   .input-premium:hover {
@@ -272,7 +273,8 @@
   }
   
   html.dark .input-premium:hover {
-    border-color: #475569; /* slate-600 */
+    border-color: #64748b; /* slate-500 */
+    background: rgba(30, 41, 59, 0.9);
   }
 
   .input-premium:focus {
@@ -282,7 +284,9 @@
   }
   
   html.dark .input-premium:focus {
-    background: rgba(15, 23, 42, 0.9);
+    background: rgba(15, 23, 42, 0.95); /* bg-slate-900 */
+    border-color: #009FE3;
+    box-shadow: 0 0 0 4px rgba(0, 159, 227, 0.15);
   }
 
   /* ─── Badges / Pills ─── */

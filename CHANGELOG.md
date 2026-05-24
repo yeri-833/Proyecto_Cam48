@@ -4,6 +4,21 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 ---
 
+## [1.2.0] - 2026-05-24
+
+### Añadido
+- **Soporte PWA (Aplicación Web Progresiva)**: Se agregó el archivo `manifest.json` y configuraciones correspondientes para soporte PWA.
+- **Roles de Usuario**: Nueva migración para añadir el campo de rol (`role`) a la tabla de usuarios, permitiendo un mejor control de acceso y autorizaciones en controladores y vistas.
+- **Borrado Lógico (Soft Deletes)**: Implementación de Soft Deletes en las tablas de `tutores` y `eventos` para evitar pérdida accidental de registros críticos y mantener la integridad del historial de asistencias.
+- **Procesamiento de Imágenes Mejorado**: Se incluyó la librería `intervention/image` en `composer.json` para optimizar y estandarizar la carga de fotografías (como fotos de perfil).
+- **Componentes UI (Paginación)**: Nuevo componente Vue para paginación (`Pagination.vue`) para optimizar el listado en vistas masivas.
+
+### Modificado
+- Refactorización y optimización en los controladores principales (`DashboardController`, `EventoController`, `ExpedienteController`, `HistorialController`, `PersonalController`, `TutorController`) para soportar los nuevos roles, borrado lógico y paginación.
+- Mejoras menores de diseño en componentes base (`DangerButton`, `Modal`, `PrimaryButton`, etc.) y vistas principales (`Agenda`, `Dashboard`, `Expedientes`, `Personal`, `Profile`, `Tutores`).
+
+---
+
 ## [1.1.0] - 2026-05-24
 
 ### Añadido

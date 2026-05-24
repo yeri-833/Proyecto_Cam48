@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Personal;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver;
 
 class PersonalController extends Controller
 {
@@ -12,7 +15,7 @@ class PersonalController extends Controller
     {
         $personal = Personal::where('activo', 1)
             ->orderBy('nombre_completo')
-            ->get();
+            ->paginate(15);
 
         return Inertia::render('Personal/Index', [
             'personal' => $personal
@@ -42,7 +45,15 @@ class PersonalController extends Controller
         $validated['activo'] = 1;
 
         if ($request->hasFile('foto_perfil')) {
-            $validated['foto_perfil'] = $request->file('foto_perfil')->store('fotos/personal', 'public');
+            $manager = new ImageManager(new Driver());
+            $image = $manager->read($request->file('foto_perfil')->getRealPath());
+            $image->scaleDown(width: 800);
+            $encoded = $image->toJpeg(quality: 80);
+            
+            $filename = 'fotos/personal/' . uniqid() . '.jpg';
+            Storage::disk('public')->put($filename, $encoded->toString());
+            
+            $validated['foto_perfil'] = $filename;
         }
 
         Personal::create($validated);
@@ -70,10 +81,19 @@ class PersonalController extends Controller
         $personal = Personal::findOrFail($id);
         
         if ($request->hasFile('foto_perfil')) {
-            if ($personal->foto_perfil && \Illuminate\Support\Facades\Storage::disk('public')->exists($personal->foto_perfil)) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($personal->foto_perfil);
+            if ($personal->foto_perfil && Storage::disk('public')->exists($personal->foto_perfil)) {
+                Storage::disk('public')->delete($personal->foto_perfil);
             }
-            $validated['foto_perfil'] = $request->file('foto_perfil')->store('fotos/personal', 'public');
+            
+            $manager = new ImageManager(new Driver());
+            $image = $manager->read($request->file('foto_perfil')->getRealPath());
+            $image->scaleDown(width: 800);
+            $encoded = $image->toJpeg(quality: 80);
+            
+            $filename = 'fotos/personal/' . uniqid() . '.jpg';
+            Storage::disk('public')->put($filename, $encoded->toString());
+            
+            $validated['foto_perfil'] = $filename;
         }
 
         $personal->update($validated);
@@ -83,6 +103,8 @@ class PersonalController extends Controller
 
     public function destroy($id)
     {
+        \Illuminate\Support\Facades\Gate::authorize('eliminar-registros');
+
         $personal = Personal::findOrFail($id);
         $personal->update(['activo' => 0]); // Borrado lógico
 

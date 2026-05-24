@@ -168,6 +168,8 @@ class HistorialController extends Controller
      */
     public function destroy($id)
     {
+        \Illuminate\Support\Facades\Gate::authorize('eliminar-registros');
+
         DB::table('registros_asistencia')->where('id', $id)->delete();
         return redirect()->back()->with('success', 'Registro eliminado correctamente.');
     }

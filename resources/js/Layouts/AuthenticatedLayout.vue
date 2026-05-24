@@ -10,6 +10,7 @@ const user = page.props.auth.user;
 
 // --- Lógica de Modo Oscuro ---
 const isDark = ref(false);
+const isNavigating = ref(false);
 
 const toggleTheme = () => {
     isDark.value = !isDark.value;
@@ -68,6 +69,10 @@ onMounted(() => {
     if (isRelevantPage) {
         syncInterval = setInterval(checkTelegramSync, 60000); // 60 segundos
     }
+
+    // Eventos de Navegación para Skeleton Loader
+    router.on('start', () => { isNavigating.value = true; });
+    router.on('finish', () => { isNavigating.value = false; });
 });
 
 onUnmounted(() => {
@@ -211,26 +216,44 @@ const confirmarSalida = () => {
                     <button @click="menuOpen = !menuOpen" class="md:hidden w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 text-slate-500 hover:text-primary flex items-center justify-center transition-all">
                         <i class="fas fa-bars"></i>
                     </button>
-                    <div id="portal-header-title"></div>
+                    <div id="portal-header-title" class="md:hidden"></div>
+                    
+                    <!-- Welcome Message (Left Side) -->
+                    <div class="hidden md:flex flex-col items-start justify-center">
+                        <p class="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] leading-none mb-1">Bienvenido,</p>
+                        <p class="text-lg font-black text-slate-700 dark:text-slate-200 leading-none">{{ user.name }}</p>
+                    </div>
                 </div>
                 
                 <div class="flex items-center gap-3">
                     <!-- Dark Mode Toggle -->
-                    <button @click="toggleTheme" class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 text-slate-500 dark:text-slate-400 hover:text-primary transition-all flex items-center justify-center shadow-sm relative overflow-hidden" title="Alternar Modo Oscuro">
+                    <button @click="toggleTheme" class="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 text-slate-500 dark:text-slate-400 hover:text-primary transition-all flex items-center justify-center shadow-sm relative overflow-hidden" title="Alternar Modo Oscuro">
                         <Transition enter-active-class="transition-transform duration-300" enter-from-class="rotate-180 scale-0" enter-to-class="rotate-0 scale-100" leave-active-class="transition-transform duration-300 absolute" leave-from-class="rotate-0 scale-100" leave-to-class="-rotate-180 scale-0">
-                            <i v-if="!isDark" class="fas fa-moon text-lg absolute"></i>
-                            <i v-else class="fas fa-sun text-lg absolute text-yellow-400"></i>
+                            <i v-if="!isDark" class="fas fa-moon text-xl absolute"></i>
+                            <i v-else class="fas fa-sun text-xl absolute text-yellow-400"></i>
                         </Transition>
                     </button>
-                    
-                    <Link :href="route('profile.edit')" class="w-10 h-10 rounded-full bg-gradient-primary text-white flex items-center justify-center font-display font-black text-sm shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all z-10" :title="user.name">
+
+                    <Link :href="route('profile.edit')" class="w-11 h-11 md:w-12 md:h-12 rounded-full bg-gradient-primary text-white flex items-center justify-center font-display font-black text-base shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all z-10 shrink-0 border-2 border-white dark:border-slate-800" :title="user.name">
                         {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
                     </Link>
                 </div>
             </nav>
 
             <!-- Page Content -->
-            <slot />
+            <div class="relative min-h-[calc(100vh-80px)]">
+                <!-- Skeleton Overlay -->
+                <Transition enter-active-class="transition-opacity duration-300" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition-opacity duration-300" leave-from-class="opacity-100" leave-to-class="opacity-0">
+                    <div v-if="isNavigating" class="absolute inset-0 z-20 bg-white/50 dark:bg-slate-900/50 backdrop-blur-[2px] flex items-center justify-center pointer-events-none">
+                        <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 flex items-center gap-3">
+                            <i class="fas fa-circle-notch fa-spin text-primary text-xl"></i>
+                            <span class="font-bold text-slate-600 dark:text-slate-300 text-sm">Cargando...</span>
+                        </div>
+                    </div>
+                </Transition>
+                
+                <slot />
+            </div>
         </main>
     </div>
 </template>
