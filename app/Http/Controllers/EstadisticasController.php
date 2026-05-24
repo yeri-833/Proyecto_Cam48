@@ -60,6 +60,34 @@ class EstadisticasController extends Controller
             })
             ->values();
 
+        // 4. Ranking de Tutores más comprometidos
+        $topTutoresIds = DB::table('registros_asistencia')
+            ->where('rol', 'Tutor')
+            ->select('id_persona', DB::raw('count(*) as asistencias'))
+            ->groupBy('id_persona')
+            ->orderByDesc('asistencias')
+            ->limit(20)
+            ->get();
+
+        // Mapear con datos reales del tutor y su alumno vinculado
+        $rankingTutores = [];
+        foreach ($topTutoresIds as $registro) {
+            $tutor = Tutor::where('t1_telefono', $registro->id_persona)
+                        ->orWhere('matricula_alumno', $registro->id_persona)
+                        ->with('alumno')
+                        ->first();
+            
+            if ($tutor) {
+                $rankingTutores[] = [
+                    'nombre_tutor' => strtoupper($tutor->t1_nombre . ' ' . $tutor->t1_apellido),
+                    'telefono' => $tutor->t1_telefono,
+                    'nombre_alumno' => $tutor->alumno ? strtoupper($tutor->alumno->nombre_completo) : 'Sin alumno',
+                    'matricula_alumno' => $tutor->matricula_alumno,
+                    'asistencias' => $registro->asistencias
+                ];
+            }
+        }
+
         return Inertia::render('Estadisticas/Index', [
             'kpis' => [
                 'diasActivos' => $diasConAsistencia,
@@ -67,7 +95,8 @@ class EstadisticasController extends Controller
                 'tutoresInactivos' => $tutoresInactivos
             ],
             'graficaDias' => $asistenciasDias,
-            'graficaRoles' => $participacionRoles
+            'graficaRoles' => $participacionRoles,
+            'rankingTutores' => $rankingTutores
         ]);
     }
 }

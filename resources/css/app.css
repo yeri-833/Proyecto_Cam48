@@ -67,8 +67,35 @@
 
   html.dark .premium-card {
     background: rgba(15, 23, 42, 0.85); /* Más oscuro para mejor contraste */
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.05);
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Sweep shimmer effect (Dark Mode) */
+  html.dark .premium-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.03), transparent);
+    transform: skewX(-20deg);
+    transition: none;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  html.dark .premium-card:hover::before {
+    animation: shimmer 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @keyframes shimmer {
+    0% { left: -100%; opacity: 0; }
+    50% { opacity: 1; }
+    100% { left: 200%; opacity: 0; }
   }
 
   .premium-card:hover {
@@ -80,8 +107,11 @@
   }
   
   html.dark .premium-card:hover {
-    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 40px -10px rgba(0, 159, 227, 0.35),
+                0 0 20px -5px rgba(166, 75, 157, 0.25),
+                0 12px 40px 0 rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(0, 159, 227, 0.4);
+    background: rgba(15, 23, 42, 0.95);
   }
 
   /* Variante estática */
@@ -287,8 +317,14 @@
   html.dark .table-premium thead th {
     @apply bg-slate-800/90 backdrop-blur-md text-slate-300 border-slate-700/50;
   }
+  
   html.dark .table-premium tbody tr {
-    @apply border-slate-700/50 hover:bg-slate-800/60;
+    @apply border-slate-700/50 transition-all duration-300;
+  }
+  
+  html.dark .table-premium tbody tr:hover {
+    background: rgba(15, 23, 42, 0.7);
+    box-shadow: inset 4px 0 0 0 #009FE3, inset 0 0 30px 0 rgba(0, 159, 227, 0.15);
   }
   
   html.dark .sidebar-shell {

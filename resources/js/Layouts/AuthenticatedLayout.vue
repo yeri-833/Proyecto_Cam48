@@ -98,8 +98,14 @@ const confirmarSalida = () => {
 </script>
 
 <template>
-    <div class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans flex min-h-screen overflow-hidden transition-colors duration-500" @keydown.escape="menuOpen = false">
+    <div class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans flex min-h-screen overflow-hidden transition-colors duration-500 relative" @keydown.escape="menuOpen = false">
         
+        <!-- Dark Mode Background Orbs -->
+        <div v-if="isDark" class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+            <div class="absolute -top-[10%] -left-[10%] w-[40vw] h-[40vw] rounded-full bg-primary/10 blur-[100px] animate-blob mix-blend-screen"></div>
+            <div class="absolute top-[20%] -right-[10%] w-[30vw] h-[30vw] rounded-full bg-secondary/15 blur-[120px] animate-blob animation-delay-2000 mix-blend-screen"></div>
+            <div class="absolute -bottom-[20%] left-[20%] w-[40vw] h-[40vw] rounded-full bg-blue-500/10 blur-[100px] animate-blob animation-delay-4000 mix-blend-screen"></div>
+        </div>
         <!-- Mobile menu overlay -->
         <Transition enter-active-class="transition-opacity duration-300" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition-opacity duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0">
             <div v-show="menuOpen" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 md:hidden" @click="menuOpen = false"></div>

@@ -4,6 +4,22 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 ---
 
+## [1.1.0] - 2026-05-24
+
+### Añadido
+- **Módulo de Estadísticas**:
+  - Implementación del **Top Padres Comprometidos** (ranking en vivo de tutores con mayor asistencia registrada, mostrando top 20, corona e insignias).
+  - Exportación nativa del reporte de ranking de tutores a **Excel** (utilizando `exceljs` y `file-saver`, con formateo automático de anchos de columna y celdas de podio destacadas en oro, plata y bronce).
+  - Exportación nativa a **PDF** (utilizando `html2pdf.js`).
+- **Mejoras Visuales Premium**:
+  - Efecto de **barrido de luz (shimmer effect)** de alta gama al pasar el mouse por las tarjetas del sistema (`premium-card` en modo oscuro).
+  - Efecto de resplandor e iluminación interactiva en bordes en modo oscuro.
+  - Efecto de sombreado y borde azul interactivo con resplandor interior al pasar el cursor sobre las filas de tablas premium (`table-premium`).
+  - Fondo enriquecido con **Orbes de luz animados (Background Orbs)** flotando sutilmente en el fondo de la interfaz en modo oscuro (`AuthenticatedLayout.vue`).
+- **Nuevas Dependencias**: `exceljs`, `file-saver`, `html2pdf.js`.
+
+---
+
 ## [1.0.0] - 2026-05-24
 
 ### Añadido
