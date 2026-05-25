@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import Swal from 'sweetalert2';
+import Pagination from '@/Components/Pagination.vue';
 
 const props = defineProps({
     stats: Object,
@@ -32,8 +33,9 @@ const alumnosFiltrados = computed(() => {
     if (!busqueda.value) return props.alumnos.data;
     const q = busqueda.value.toLowerCase();
     return props.alumnos.data.filter(a =>
-        a.nombre_completo.toLowerCase().includes(q) ||
-        a.matricula.toLowerCase().includes(q)
+        (a.nombre && String(a.nombre).toLowerCase().includes(q)) ||
+        (a.apellido && String(a.apellido).toLowerCase().includes(q)) ||
+        (a.matricula && String(a.matricula).toLowerCase().includes(q))
     );
 });
 
@@ -135,7 +137,6 @@ const guardarEdicion = () => {
         });
     }
 };
-import Pagination from '@/Components/Pagination.vue';
 </script>
 
 <template>

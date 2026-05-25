@@ -4,6 +4,14 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 ---
 
+## [1.2.1] - 2026-05-24
+
+### Modificado
+- **Mejoras de UI y Paginación**: Integración completa del componente `Pagination.vue` en las vistas principales (`Dashboard`, `Expedientes`, `Personal`, `Tutores`) para mejorar la navegación de registros masivos.
+- **Optimización de Código (Formateo)**: Estandarización y formateo general del código fuente en las vistas principales Vue para mejorar la legibilidad y mantenimiento.
+
+---
+
 ## [1.2.0] - 2026-05-24
 
 ### Añadido

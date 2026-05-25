@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, onMounted } from 'vue';
 import Swal from 'sweetalert2';
+import Pagination from '@/Components/Pagination.vue';
 
 const props = defineProps({
     personal: Object,
@@ -30,9 +31,9 @@ const personalFiltrado = computed(() => {
     if (!busqueda.value) return props.personal.data;
     const q = busqueda.value.toLowerCase();
     return props.personal.data.filter(p =>
-        p.nombre_completo.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q) ||
-        (p.categoria && p.categoria.toLowerCase().includes(q))
+        (p.nombre_completo && String(p.nombre_completo).toLowerCase().includes(q)) ||
+        (p.id && String(p.id).toLowerCase().includes(q)) ||
+        (p.categoria && String(p.categoria).toLowerCase().includes(q))
     );
 });
 
@@ -185,7 +186,6 @@ const enviarInvitacion = (p) => {
         }
     });
 };
-import Pagination from '@/Components/Pagination.vue';
 </script>
 
 <template>
