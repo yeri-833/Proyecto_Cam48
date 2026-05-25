@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Personal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
@@ -34,6 +35,7 @@ class PersonalController extends Controller
             'plaza' => 'nullable|string|max:100',
             'grado_grupo' => 'nullable|string|max:50',
             'telefono' => 'nullable|string|max:20',
+            'telegram_chat_id' => 'nullable|string|max:100',
             'foto_perfil' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ], [
             'id.required' => 'El ID/Matrícula es obligatorio.',
@@ -72,6 +74,7 @@ class PersonalController extends Controller
             'plaza' => 'nullable|string|max:100',
             'grado_grupo' => 'nullable|string|max:50',
             'telefono' => 'nullable|string|max:20',
+            'telegram_chat_id' => 'nullable|string|max:100',
             'foto_perfil' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ], [
             'nombre_completo.required' => 'El nombre completo es obligatorio.',
@@ -167,7 +170,7 @@ class PersonalController extends Controller
     {
         $personal = Personal::findOrFail($id);
         
-        $botUsername = env('TELEGRAM_BOT_USERNAME', 'cam48_notificaciones_bot');
+        $botUsername = config('telegram.bot_username');
         $codigoMagico = 'personal_' . $personal->id;
         $enlaceMagico = "https://t.me/{$botUsername}?start={$codigoMagico}";
 
@@ -180,8 +183,9 @@ class PersonalController extends Controller
                 
                 return redirect()->back()->with('success', 'Invitación enviada por correo electrónico al docente exitosamente.');
             } catch (\Exception $e) {
+                Log::error('Error enviando invitación Telegram a personal: ' . $e->getMessage(), ['id' => $id]);
                 return redirect()->back()->withErrors([
-                    'mensaje' => 'No se pudo enviar el correo: ' . $e->getMessage() . '. Puedes enviarle este enlace manual: ' . $enlaceMagico
+                    'mensaje' => 'No se pudo enviar el correo. Puedes enviarle este enlace de forma manual: ' . $enlaceMagico
                 ]);
             }
         }

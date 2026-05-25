@@ -9,6 +9,7 @@ use App\Mail\InvitacionTelegramMail;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
@@ -164,8 +165,9 @@ class TutorController extends Controller
             Mail::to($tutor->t1_email)->send(new InvitacionTelegramMail($tutor, $enlaceMagico));
             return redirect()->back()->with('success', 'Invitación enviada por correo electrónico correctamente.');
         } catch (\Exception $e) {
+            Log::error('Error enviando invitación Telegram a tutor: ' . $e->getMessage(), ['id' => $id]);
             return redirect()->back()->withErrors([
-                'mensaje' => 'Hubo un problema al enviar el correo: ' . $e->getMessage()
+                'mensaje' => 'Hubo un problema al enviar el correo. Intenta de nuevo más tarde.'
             ]);
         }
     }
@@ -175,7 +177,7 @@ class TutorController extends Controller
      */
     public function syncTelegram()
     {
-        $token = env('TELEGRAM_BOT_TOKEN');
+        $token = config('telegram.bot_token');
         if (empty($token)) {
             return response()->json(['status' => 'no_token']);
         }
@@ -184,8 +186,7 @@ class TutorController extends Controller
         $vinculadosNuevos = [];
 
         try {
-            $response = \Illuminate\Support\Facades\Http::withoutVerifying()
-                ->timeout(5)
+            $response = \Illuminate\Support\Facades\Http::timeout(5)
                 ->get("https://api.telegram.org/bot{$token}/getUpdates", [
                     'offset' => $offset,
                     'timeout' => 1
@@ -219,7 +220,7 @@ class TutorController extends Controller
                                          . "Para recibir los avisos y circulares generales de la escuela, por favor únete a nuestro canal tocando el siguiente enlace:\n"
                                          . "👉 https://t.me/cam48comunicados";
                                 
-                                \Illuminate\Support\Facades\Http::withoutVerifying()->post("https://api.telegram.org/bot{$token}/sendMessage", [
+                                \Illuminate\Support\Facades\Http::post("https://api.telegram.org/bot{$token}/sendMessage", [
                                     'chat_id' => $chatId,
                                     'text' => $mensaje,
                                     'parse_mode' => 'Markdown'
@@ -240,7 +241,7 @@ class TutorController extends Controller
                                          . "Recibirás avisos institucionales, notificaciones de juntas y circulares directamente en este chat.\n\n"
                                          . "📢 *Recuerda unirte al grupo del personal si no lo has hecho:* (Consulta el enlace con Dirección).";
                                 
-                                \Illuminate\Support\Facades\Http::withoutVerifying()->post("https://api.telegram.org/bot{$token}/sendMessage", [
+                                \Illuminate\Support\Facades\Http::post("https://api.telegram.org/bot{$token}/sendMessage", [
                                     'chat_id' => $chatId,
                                     'text' => $mensaje,
                                     'parse_mode' => 'Markdown'
@@ -254,7 +255,8 @@ class TutorController extends Controller
                 \Illuminate\Support\Facades\Cache::put('telegram_bot_offset', $offset, now()->addDays(1));
             }
         } catch (\Exception $e) {
-            return response()->json(['status' => 'error', 'message' => $e->getMessage()]);
+            Log::error('Error en syncTelegram: ' . $e->getMessage());
+            return response()->json(['status' => 'error', 'message' => 'Error de sincronización.']);
         }
 
         return response()->json([

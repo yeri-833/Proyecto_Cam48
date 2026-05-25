@@ -116,17 +116,6 @@ class HistorialController extends Controller
         $rol = $request->query('rol', 'Todos');
 
         $query = $this->getBaseQuery($fecha, $busqueda, $rol);
-        
-        $registros = $query->select(
-                'r.hora',
-                'r.id_persona',
-                DB::raw("COALESCE(a.nombre, p.nombre_completo, t.t1_nombre, r.id_persona) as nombre_persona"),
-                DB::raw("COALESCE(a.apellido, '') as apellido_persona"),
-                'r.rol'
-            )
-            ->orderBy('r.hora', 'desc')
-            ->get();
-
         $nombreArchivo = "Reporte_Asistencias_" . $fecha . ".csv";
 
         $cabeceras = [
@@ -137,7 +126,7 @@ class HistorialController extends Controller
             "Expires"             => "0"
         ];
 
-        $callback = function() use($registros) {
+        $callback = function() use($query) {
             $file = fopen('php://output', 'w');
             
             // BOM for UTF-8 compatibility in Excel
@@ -146,16 +135,26 @@ class HistorialController extends Controller
             // Encabezados
             fputcsv($file, ['Hora', 'Identificacion', 'Nombre Completo', 'Rol']);
 
-            // Filas
-            foreach ($registros as $row) {
-                $nombreCompleto = trim($row->nombre_persona . ' ' . $row->apellido_persona);
-                fputcsv($file, [
-                    Carbon::parse($row->hora)->format('h:i A'),
-                    $row->id_persona,
-                    $nombreCompleto,
-                    $row->rol
-                ]);
-            }
+            // Uso de Chunk para procesar en lotes de 500 y no saturar RAM
+            $query->select(
+                'r.hora',
+                'r.id_persona',
+                DB::raw("COALESCE(a.nombre, p.nombre_completo, t.t1_nombre, r.id_persona) as nombre_persona"),
+                DB::raw("COALESCE(a.apellido, '') as apellido_persona"),
+                'r.rol'
+            )
+            ->orderBy('r.hora', 'desc')
+            ->chunk(500, function($registros) use ($file) {
+                foreach ($registros as $row) {
+                    $nombreCompleto = trim($row->nombre_persona . ' ' . $row->apellido_persona);
+                    fputcsv($file, [
+                        Carbon::parse($row->hora)->format('h:i A'),
+                        $row->id_persona,
+                        $nombreCompleto,
+                        $row->rol
+                    ]);
+                }
+            });
 
             fclose($file);
         };

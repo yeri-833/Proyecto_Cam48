@@ -312,16 +312,16 @@ onUnmounted(() => {
             </div>
             
             <div class="flex gap-3">
-                <button @click="togglePantallaCompleta" class="bg-slate-800 hover:bg-slate-700 text-slate-300 w-11 h-11 flex items-center justify-center rounded-xl transition-all border border-white/5" title="Pantalla Completa">
+                <button aria-label="Alternar pantalla completa" @click="togglePantallaCompleta" class="bg-slate-800 hover:bg-slate-700 text-slate-300 w-11 h-11 flex items-center justify-center rounded-xl transition-all border border-white/5" title="Pantalla Completa">
                     <i class="fas fa-expand"></i>
                 </button>
 
-                <button @click="toggleModoCamara" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 border border-white/5">
+                <button :aria-label="usandoCamara ? 'Cambiar a lector USB' : 'Cambiar a cámara web'" @click="toggleModoCamara" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 border border-white/5">
                     <i class="fas fa-camera text-secondary"></i> 
                     <span>{{ usandoCamara ? 'Lector USB' : 'Cámara Web' }}</span>
                 </button>
                 
-                <button @click="intentarSalir" class="bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 px-5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 border border-red-500/20">
+                <button aria-label="Salir del modo kiosco y regresar al panel de control" @click="intentarSalir" class="bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 px-5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 border border-red-500/20">
                     <i class="fas fa-lock"></i> Salir
                 </button>
             </div>

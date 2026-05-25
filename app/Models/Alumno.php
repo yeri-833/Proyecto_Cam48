@@ -10,7 +10,7 @@ class Alumno extends Model
     protected $primaryKey = 'matricula';
     public $incrementing = false;
     protected $keyType = 'string';
-    public $timestamps = false;
+    public $timestamps = true;
 
     protected $fillable = [
         'matricula', 'nombre', 'apellido', 'sexo', 'curp', 'foto_perfil',

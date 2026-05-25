@@ -12,10 +12,10 @@ Route::get('/', function () {
 Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::put('/alumnos/{matricula}', [App\Http\Controllers\DashboardController::class, 'updateAlumno'])
+Route::put('/alumnos/{matricula}', [App\Http\Controllers\AlumnoController::class, 'update'])
     ->middleware(['auth'])->name('alumnos.update');
 
-Route::post('/alumnos', [App\Http\Controllers\DashboardController::class, 'storeAlumno'])
+Route::post('/alumnos', [App\Http\Controllers\AlumnoController::class, 'store'])
     ->middleware(['auth'])->name('alumnos.store');
 
 Route::middleware('auth')->group(function () {
@@ -34,7 +34,9 @@ Route::middleware('auth')->group(function () {
 
     // Módulo de Asistencia (Escáner QR)
     Route::get('/escaner', [App\Http\Controllers\AsistenciaController::class, 'escaner'])->name('asistencia.escaner');
-    Route::post('/escaner/procesar', [App\Http\Controllers\AsistenciaController::class, 'procesarQr'])->name('asistencia.procesarQr');
+    Route::post('/escaner/procesar', [App\Http\Controllers\AsistenciaController::class, 'procesarQr'])
+        ->middleware('throttle:60,1')
+        ->name('asistencia.procesarQr');
     Route::post('/escaner/desbloquear', [App\Http\Controllers\AsistenciaController::class, 'desbloquearKiosco'])->name('asistencia.desbloquear');
 
     // Historial Diario de Accesos

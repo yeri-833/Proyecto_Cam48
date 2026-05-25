@@ -21,7 +21,8 @@ class CredencialController extends Controller
                 'nombre' => $a->nombre,
                 'apellido' => $a->apellido,
                 'rol' => 'Alumno',
-                'foto_perfil' => $a->foto_perfil
+                'foto_perfil' => $a->foto_perfil,
+                'signature' => hash_hmac('sha256', $a->matricula . 'Alumno', config('app.key'))
             ];
         });
 
@@ -31,7 +32,8 @@ class CredencialController extends Controller
                 'nombre' => $p->nombre_completo,
                 'apellido' => '',
                 'rol' => $p->rol ?? 'Docente',
-                'foto_perfil' => $p->foto_perfil
+                'foto_perfil' => $p->foto_perfil,
+                'signature' => hash_hmac('sha256', $p->id . ($p->rol ?? 'Docente'), config('app.key'))
             ];
         });
 
@@ -41,7 +43,8 @@ class CredencialController extends Controller
                 'nombre' => $t->t1_nombre,
                 'apellido' => '',
                 'rol' => 'Tutor',
-                'foto_perfil' => $t->t1_foto_perfil
+                'foto_perfil' => $t->t1_foto_perfil,
+                'signature' => hash_hmac('sha256', $t->t1_telefono . 'Tutor', config('app.key'))
             ];
         });
 

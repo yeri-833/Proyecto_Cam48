@@ -13,9 +13,9 @@ class WhatsAppService
 
     public function __construct()
     {
-        // Se toman las credenciales del .env
-        $this->apiUrl = env('WHATSAPP_API_URL', '');
-        $this->apiToken = env('WHATSAPP_API_TOKEN', '');
+        // Se toman las credenciales vía config() en lugar de env()
+        $this->apiUrl = config('whatsapp.api_url', '');
+        $this->apiToken = config('whatsapp.api_token', '');
         
         // Si no hay token configurado, entramos en modo simulación
         $this->modoSimulacion = empty($this->apiToken) || empty($this->apiUrl);
@@ -39,7 +39,7 @@ class WhatsAppService
                  . "📌 Tipo: {$tipo}\n\n"
                  . "_Este es un mensaje automático, por favor no responda._";
 
-        return $this->enviarMensaje($telefonoLimpio, $mensaje);
+        return $this->enviarMensajeDirecto($telefonoLimpio, $mensaje);
     }
 
     /**
@@ -58,37 +58,22 @@ class WhatsAppService
         
         $mensaje .= "\n_Por favor, agéndelo. Le esperamos._";
 
-        $tutores = \App\Models\Tutor::all();
-        $enviados = 0;
-
-        foreach ($tutores as $tutor) {
-            // 1. Enviar WhatsApp al Tutor
-            if (!empty($tutor->t1_telefono)) {
-                $telefonoLimpio = preg_replace('/[^0-9]/', '', $tutor->t1_telefono);
-                $this->enviarMensaje($telefonoLimpio, $mensaje);
+        // Procesar en lotes de 100 para no saturar memoria RAM
+        \App\Models\Tutor::chunk(100, function ($tutores) use ($mensaje, $nombreEvento, $fecha, $ubicacion) {
+            foreach ($tutores as $tutor) {
+                // Despachar a la cola (respuesta en milisegundos)
+                \App\Jobs\NotificarEventoTutorJob::dispatch($tutor, $mensaje, $nombreEvento, $fecha, $ubicacion ?? 'Por confirmar');
             }
+        });
 
-            // 2. Enviar Correo Electrónico al Tutor
-            if (!empty($tutor->t1_email)) {
-                try {
-                    \Illuminate\Support\Facades\Mail::to($tutor->t1_email)
-                        ->send(new \App\Mail\AvisoEventoMail($nombreEvento, $fecha, $ubicacion ?? 'Por confirmar'));
-                    Log::info("📧 Correo de Evento enviado a {$tutor->t1_email}");
-                } catch (\Exception $e) {
-                    Log::error("Fallo al enviar correo a {$tutor->t1_email}: " . $e->getMessage());
-                }
-            }
-            $enviados++;
-        }
-
-        Log::info("✅ Aviso de Evento procesado para {$enviados} tutores.");
+        Log::info("✅ Creación de avisos de Evento masivos enviada a la Cola de Trabajos.");
         return true;
     }
 
     /**
      * Método base para disparar la petición HTTP a la API de WhatsApp
      */
-    private function enviarMensaje($telefonoDestino, $mensaje)
+    public function enviarMensajeDirecto($telefonoDestino, $mensaje)
     {
         if ($this->modoSimulacion) {
             // MODO PREPARADO / SIMULADO

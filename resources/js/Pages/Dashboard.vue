@@ -47,10 +47,14 @@ const form = useForm({
     nombre: '',
     apellido: '',
     sexo: 'M',
+    curp: '',
+    fecha_nacimiento: '',
+    edad: '',
     nivel_educativo: '',
     grado: '',
     grupo: '',
     discapacidad: '',
+    comentarios: '',
     foto_perfil: null,
     _method: 'put'
 });
@@ -74,10 +78,14 @@ const abrirModalNuevo = () => {
     form.nombre = '';
     form.apellido = '';
     form.sexo = 'M';
+    form.curp = '';
+    form.fecha_nacimiento = '';
+    form.edad = '';
     form.nivel_educativo = '';
     form.grado = '';
     form.grupo = '';
     form.discapacidad = '';
+    form.comentarios = '';
     form.foto_perfil = null;
     form._method = 'post';
     modalEditar.value = true;
@@ -89,10 +97,14 @@ const abrirModalEditar = (alumno) => {
     matriculaSeleccionada.value = alumno.matricula;
     form.nombre = alumno.nombre;
     form.apellido = alumno.apellido;
+    form.curp = alumno.curp || '';
+    form.fecha_nacimiento = alumno.fecha_nacimiento || '';
+    form.edad = alumno.edad || '';
     form.nivel_educativo = normalizeNivel(alumno.nivel_educativo);
     form.grado = alumno.grado;
     form.grupo = alumno.grupo;
-    form.discapacidad = alumno.discapacidad;
+    form.discapacidad = alumno.discapacidad || '';
+    form.comentarios = alumno.comentarios || '';
     form.foto_perfil = null;
     form._method = 'put';
     modalEditar.value = true;
@@ -348,6 +360,11 @@ const guardarEdicion = () => {
                                 <label class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">Apellidos</label>
                                 <input type="text" v-model="form.apellido" class="input-premium w-full uppercase" placeholder="Ej. PÉREZ GARCÍA" required>
                             </div>
+                            <div>
+                                <label class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">CURP</label>
+                                <input type="text" v-model="form.curp" class="input-premium w-full uppercase" placeholder="18 Caracteres" maxlength="18">
+                                <p v-if="form.errors.curp" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.curp }}</p>
+                            </div>
                             <div v-if="!modoEdicion">
                                 <label class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">Sexo</label>
                                 <select v-model="form.sexo" class="input-premium w-full cursor-pointer">
@@ -375,9 +392,23 @@ const guardarEdicion = () => {
                                     <input type="text" v-model="form.grupo" class="input-premium w-full uppercase" placeholder="Ej. A, B">
                                 </div>
                             </div>
+                            <div class="grid grid-cols-2 gap-2 md:col-span-1">
+                                <div>
+                                    <label class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">Nacimiento</label>
+                                    <input type="date" v-model="form.fecha_nacimiento" class="input-premium w-full cursor-pointer">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">Edad</label>
+                                    <input type="number" min="0" max="99" v-model="form.edad" class="input-premium w-full" placeholder="Años">
+                                </div>
+                            </div>
                             <div class="md:col-span-2">
                                 <label class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">Discapacidad / Diagnóstico</label>
                                 <input type="text" v-model="form.discapacidad" class="input-premium w-full" placeholder="Ej. Autismo, Motriz, Intelectual...">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">Comentarios (Opcional)</label>
+                                <textarea v-model="form.comentarios" rows="2" class="input-premium w-full resize-none" placeholder="Observaciones adicionales..."></textarea>
                             </div>
                             <div class="md:col-span-2">
                                 <label class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">Foto de Perfil (Opcional)</label>

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class RegistroAsistencia extends Model
 {
     protected $table = 'registros_asistencia';
-    public $timestamps = false;
+    public $timestamps = true;
 
     protected $fillable = [
         'id_persona', 'rol', 'fecha', 'hora'

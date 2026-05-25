@@ -4,6 +4,26 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 ---
 
+## [1.3.0] - 2026-05-25
+
+### Añadido
+- **Arquitectura de Tareas en Segundo Plano**: Se integró el sistema de `Jobs` (colas de trabajo) para manejar procesos pesados de forma asíncrona (como envío de notificaciones), mejorando radicalmente la velocidad de respuesta del sistema.
+- **Servicio de Imágenes (`ImageUploadService`)**: Nuevo servicio centralizado para la optimización, redimensionamiento y almacenamiento de fotografías.
+- **Gestión de Alumnos**: Nuevo controlador dedicado `AlumnoController`.
+- **Archivos de Configuración Independientes**: Creación de `config/telegram.php` y `config/whatsapp.php` para centralizar y asegurar las credenciales de mensajería.
+- **Optimización de Base de Datos**: Nuevas migraciones para indexar las tablas de asistencia (`optimizar_indices_asistencia`) y añadir timestamps, acelerando drásticamente las consultas de reportes.
+- **Nuevas Pruebas Unitarias (Tests)**: Añadidas pruebas específicas para el núcleo del sistema (`EscaneoSeguridadTest`, `HistorialExportacionTest`, `NotificacionEventosTest`).
+
+### Modificado
+- **Refactorización Profunda**: Limpieza masiva en `DashboardController` (reducción de lógica pesada) delegando responsabilidades a servicios y colas.
+- **Controladores Optimizados**: Refactorización de `AsistenciaController`, `HistorialController` y `WhatsAppService` para mayor rendimiento y código limpio.
+- **UI de Login y Dashboard**: Mejoras visuales en los componentes de autenticación y panel de control.
+
+### Eliminado
+- **Limpieza de Tests Obsoletos**: Eliminación de más de 500 líneas de pruebas predeterminadas de Laravel Auth y Profile que no se usaban en la arquitectura de CAM48.
+
+---
+
 ## [1.2.1] - 2026-05-24
 
 ### Modificado

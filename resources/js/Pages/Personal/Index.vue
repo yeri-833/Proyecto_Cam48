@@ -23,6 +23,7 @@ const form = useForm({
     plaza: '',
     grado_grupo: '',
     telefono: '',
+    telegram_chat_id: '',
     foto_perfil: null,
     _method: 'post'
 });
@@ -41,6 +42,7 @@ const abrirModalNuevo = () => {
     modoEdicion.value = false;
     form.reset();
     form.clearErrors();
+    form.telegram_chat_id = '';
     form.foto_perfil = null;
     form._method = 'post';
     modalAbierto.value = true;
@@ -58,6 +60,7 @@ const abrirModalEditar = (p) => {
     form.plaza = p.plaza || '';
     form.grado_grupo = p.grado_grupo || '';
     form.telefono = p.telefono || '';
+    form.telegram_chat_id = p.telegram_chat_id || '';
     form.foto_perfil = null;
     form._method = 'put';
     modalAbierto.value = true;
@@ -363,9 +366,15 @@ const enviarInvitacion = (p) => {
                         </div>
                     </div>
                     
-                    <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Teléfono de Contacto</label>
-                        <input type="tel" v-model="form.telefono" placeholder="10 dígitos" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Teléfono de Contacto</label>
+                            <input type="tel" v-model="form.telefono" placeholder="10 dígitos" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Telegram Chat ID (Opcional)</label>
+                            <input type="text" v-model="form.telegram_chat_id" placeholder="Ej. 123456789" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all">
+                        </div>
                     </div>
                     
                     <div>

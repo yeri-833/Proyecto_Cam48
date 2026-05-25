@@ -8,10 +8,12 @@ use App\Models\Tutor;
 use App\Models\RegistroAsistencia;
 use App\Services\WhatsAppService;
 use App\Services\TelegramService;
+use App\Jobs\NotificarAsistenciaJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Log;
 
 class AsistenciaController extends Controller
 {
@@ -40,6 +42,7 @@ class AsistenciaController extends Controller
         // Lógica para detectar el ID de la persona y su rol
         $idPersona = null;
         $rol = 'Alumno'; // Por defecto
+        $signature = null;
 
         // Caso A: JSON string
         if (is_string($qrData)) {
@@ -47,19 +50,34 @@ class AsistenciaController extends Controller
             if (json_last_error() === JSON_ERROR_NONE && isset($decoded['id'])) {
                 $idPersona = trim($decoded['id']);
                 $rol = $decoded['rol'] ?? 'Alumno';
+                $signature = $decoded['signature'] ?? null;
             } else {
-                // Caso B: Texto plano (ID directo)
-                $idPersona = trim($qrData);
+                // Caso B: Texto plano (Ya no se permite bajo el nuevo esquema de seguridad estricto)
+                return response()->json([
+                    'status' => 'error',
+                    'msg' => 'Formato de QR no soportado o obsoleto. Por favor, genere una nueva credencial.'
+                ]);
             }
         } elseif (is_array($qrData)) {
             $idPersona = trim($qrData['id'] ?? '');
             $rol = $qrData['rol'] ?? 'Alumno';
+            $signature = $qrData['signature'] ?? null;
         }
 
         if (empty($idPersona)) {
             return response()->json([
                 'status' => 'error',
                 'msg' => 'ID no válido en el código QR'
+            ]);
+        }
+
+        // Validación de Firma HMAC Anti-clonación
+        $expectedSignature = hash_hmac('sha256', $idPersona . $rol, config('app.key'));
+        
+        if (empty($signature) || !hash_equals($expectedSignature, $signature)) {
+            return response()->json([
+                'status' => 'error',
+                'msg' => 'Código QR inválido o falsificado (Firma incorrecta)'
             ]);
         }
 
@@ -144,25 +162,12 @@ class AsistenciaController extends Controller
                 $horaFormateada = Carbon::now()->format('h:i A');
                 $tipoPase = Carbon::now()->hour < 13 ? 'ENTRADA' : 'SALIDA';
 
-                // 1. WhatsApp
-                $wsService = new WhatsAppService();
-                $wsService->enviarAvisoAsistencia(
-                    $alumno->tutores->t1_telefono,
-                    $nombreCompleto,
-                    $horaFormateada,
-                    $tipoPase
+                NotificarAsistenciaJob::dispatch(
+                    $alumno, 
+                    $tipoPase, 
+                    $horaFormateada, 
+                    $nombreCompleto
                 );
-
-                // 2. Telegram (Si tiene Chat ID registrado)
-                if (!empty($alumno->tutores->t1_telegram_chat_id)) {
-                    $tgService = new TelegramService();
-                    $tgService->enviarAvisoAsistencia(
-                        $alumno->tutores->t1_telegram_chat_id,
-                        $nombreCompleto,
-                        $horaFormateada,
-                        $tipoPase
-                    );
-                }
                 
                 $msgResponse = 'Asistencia registrada y avisos enviados';
             } else {
@@ -178,9 +183,10 @@ class AsistenciaController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Log::error('Error en procesarQr: ' . $e->getMessage(), ['id' => $idPersona ?? 'N/A']);
             return response()->json([
                 'status' => 'error',
-                'msg' => 'Error del sistema: ' . $e->getMessage()
+                'msg' => 'Ocurrió un error inesperado. Intenta de nuevo.'
             ]);
         }
     }

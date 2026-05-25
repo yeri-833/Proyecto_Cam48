@@ -178,3 +178,19 @@ const submit = () => {
         </div>
     </div>
 </template>
+
+<style scoped>
+/* Ocultar el ícono de revelar contraseña nativo de Edge e Internet Explorer */
+input::-ms-reveal,
+input::-ms-clear {
+    display: none;
+}
+
+/* Ocultar en algunos navegadores Webkit si lo implementaran */
+input[type="password"]::-webkit-credentials-auto-fill-button {
+    visibility: hidden;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+}
+</style>

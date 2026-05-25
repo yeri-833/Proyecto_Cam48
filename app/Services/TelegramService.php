@@ -13,8 +13,8 @@ class TelegramService
 
     public function __construct()
     {
-        $this->botToken = env('TELEGRAM_BOT_TOKEN', '');
-        $this->channelId = env('TELEGRAM_CHANNEL_ID', '');
+        $this->botToken = config('telegram.bot_token', '');
+        $this->channelId = config('telegram.channel_id', '');
         
         // Si no hay token de bot, entramos en modo simulación (Mock)
         $this->modoSimulacion = empty($this->botToken);
@@ -76,7 +76,7 @@ class TelegramService
 
         try {
             $url = "https://api.telegram.org/bot{$this->botToken}/sendMessage";
-            $response = Http::withoutVerifying()->post($url, [
+            $response = Http::post($url, [
                 'chat_id' => $chatId,
                 'text' => $mensaje,
                 'parse_mode' => 'Markdown'
