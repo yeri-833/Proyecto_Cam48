@@ -35,11 +35,17 @@ class EstadisticasController extends Controller
 
         // 2. Gráfica de Barras (Últimos 7 días con actividad)
         $asistenciasDias = DB::table('registros_asistencia')
-            ->select(DB::raw("DATE_FORMAT(fecha, '%d/%m') as dia"), DB::raw("COUNT(*) as total"))
+            ->select('fecha', DB::raw("COUNT(*) as total"))
             ->groupBy('fecha')
             ->orderBy('fecha', 'desc')
             ->limit(7)
             ->get()
+            ->map(function ($item) {
+                return [
+                    'dia' => Carbon::parse($item->fecha)->format('d/m'),
+                    'total' => (int) $item->total,
+                ];
+            })
             ->reverse()
             ->values(); // Reset keys for JSON array
 

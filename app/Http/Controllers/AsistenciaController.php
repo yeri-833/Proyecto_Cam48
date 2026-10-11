@@ -83,6 +83,7 @@ class AsistenciaController extends Controller
 
         try {
             $nombreCompleto = '';
+            $personaModel = null;
             $fechaHoy = Carbon::today()->toDateString();
             $horaActual = Carbon::now()->toTimeString();
 
@@ -98,6 +99,7 @@ class AsistenciaController extends Controller
                         ]);
                     }
                     $nombreCompleto = $alumno->nombre_completo;
+                    $personaModel = $alumno;
                     $rol = 'Alumno';
                 } else {
                     // Buscar en Tutores si no se halló como Alumno
@@ -107,6 +109,7 @@ class AsistenciaController extends Controller
                     
                     if ($tutor) {
                         $nombreCompleto = strtoupper($tutor->t1_nombre . ' ' . $tutor->t1_apellido);
+                        $personaModel = $tutor;
                         $rol = 'Tutor';
                     }
                 }
@@ -121,10 +124,11 @@ class AsistenciaController extends Controller
                         ]);
                     }
                     $nombreCompleto = strtoupper($personal->nombre_completo);
+                    $personaModel = $personal;
                 }
             }
 
-            if (empty($nombreCompleto)) {
+            if (empty($nombreCompleto) || empty($personaModel)) {
                 return response()->json([
                     'status' => 'error',
                     'msg' => 'El código no existe en el sistema',
@@ -133,7 +137,7 @@ class AsistenciaController extends Controller
             }
 
             // Cooldown de 5 minutos para evitar duplicados accidentales
-            $ultimoRegistro = RegistroAsistencia::where('id_persona', $idPersona)
+            $ultimoRegistro = $personaModel->asistencias()
                 ->where('fecha', $fechaHoy)
                 ->orderBy('hora', 'desc')
                 ->first();
@@ -150,15 +154,13 @@ class AsistenciaController extends Controller
             }
 
             // Registrar la asistencia
-            RegistroAsistencia::create([
-                'id_persona' => $idPersona,
-                'rol' => $rol,
+            $personaModel->asistencias()->create([
                 'fecha' => $fechaHoy,
                 'hora' => $horaActual
             ]);
 
             // =========== ALERTAS AUTOMÁTICAS (WHATSAPP + TELEGRAM) ===========
-            if ($rol === 'Alumno' && isset($alumno) && $alumno->tutores) {
+            if ($rol === 'Alumno' && isset($alumno) && $alumno->tutor) {
                 $horaFormateada = Carbon::now()->format('h:i A');
                 $tipoPase = Carbon::now()->hour < 13 ? 'ENTRADA' : 'SALIDA';
 

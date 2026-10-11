@@ -10,8 +10,13 @@ use Inertia\Inertia;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
 
+use App\Services\TelegramService;
+
 class PersonalController extends Controller
 {
+    public function __construct(private TelegramService $telegramService)
+    {
+    }
     public function index()
     {
         $personal = Personal::where('activo', 1)
@@ -128,8 +133,7 @@ class PersonalController extends Controller
             ]);
         }
 
-        $tgService = new \App\Services\TelegramService();
-        $exito = $tgService->enviarMensajeDirecto(
+        $exito = $this->telegramService->enviarMensajeDirecto(
             $personal->telegram_chat_id,
             $personal->nombre_completo,
             $validated['mensaje']
@@ -151,11 +155,10 @@ class PersonalController extends Controller
         ]);
 
         $personalConTelegram = Personal::whereNotNull('telegram_chat_id')->where('activo', 1)->get();
-        $tgService = new \App\Services\TelegramService();
         $enviados = 0;
 
         foreach ($personalConTelegram as $p) {
-            $exito = $tgService->enviarMensajeDirecto(
+            $exito = $this->telegramService->enviarMensajeDirecto(
                 $p->telegram_chat_id,
                 $p->nombre_completo,
                 "📢 *Aviso Institucional (Personal)*\n\n" . $validated['mensaje']

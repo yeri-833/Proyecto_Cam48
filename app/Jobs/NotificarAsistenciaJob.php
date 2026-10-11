@@ -21,10 +21,14 @@ class NotificarAsistenciaJob implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct(Alumno $alumno, $tipoPase, $horaFormateada, $nombreCompleto)
-    {
-        $this->alumno = $alumno;
-        $this->tipoPase = $tipoPase;
+    public function __construct(
+        Alumno $alumno,
+        string $tipoPase,
+        string $horaFormateada,
+        string $nombreCompleto
+    ) {
+        $this->alumno         = $alumno;
+        $this->tipoPase       = $tipoPase;
         $this->horaFormateada = $horaFormateada;
         $this->nombreCompleto = $nombreCompleto;
     }
@@ -32,24 +36,22 @@ class NotificarAsistenciaJob implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(): void
+    public function handle(WhatsAppService $whatsAppService, TelegramService $telegramService): void
     {
         try {
-            if ($this->alumno && $this->alumno->tutores) {
+            if ($this->alumno && $this->alumno->tutor) {
                 // 1. WhatsApp
-                $wsService = new WhatsAppService();
-                $wsService->enviarAvisoAsistencia(
-                    $this->alumno->tutores->t1_telefono,
+                $whatsAppService->enviarAvisoAsistencia(
+                    $this->alumno->tutor->t1_telefono,
                     $this->nombreCompleto,
                     $this->horaFormateada,
                     $this->tipoPase
                 );
 
                 // 2. Telegram (Si tiene Chat ID registrado)
-                if (!empty($this->alumno->tutores->t1_telegram_chat_id)) {
-                    $tgService = new TelegramService();
-                    $tgService->enviarAvisoAsistencia(
-                        $this->alumno->tutores->t1_telegram_chat_id,
+                if (!empty($this->alumno->tutor->t1_telegram_chat_id)) {
+                    $telegramService->enviarAvisoAsistencia(
+                        $this->alumno->tutor->t1_telegram_chat_id,
                         $this->nombreCompleto,
                         $this->horaFormateada,
                         $this->tipoPase

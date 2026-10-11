@@ -21,14 +21,14 @@ class Alumno extends Model
         'activo' => 'boolean',
     ];
 
-    public function tutores()
+    public function tutor()
     {
         return $this->hasOne(Tutor::class, 'matricula_alumno', 'matricula');
     }
 
     public function asistencias()
     {
-        return $this->hasMany(RegistroAsistencia::class, 'id_persona', 'matricula');
+        return $this->morphMany(RegistroAsistencia::class, 'asistible');
     }
 
     // Accessor para nombre completo

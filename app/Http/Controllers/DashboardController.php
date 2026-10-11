@@ -29,7 +29,7 @@ class DashboardController extends Controller
 
         // Tabla de expedientes paginada
         $alumnos = Alumno::where('activo', 1)
-            ->with('tutores')
+            ->with('tutor')
             ->orderBy('apellido')
             ->paginate(15)
             ->through(fn ($a) => [
@@ -43,7 +43,7 @@ class DashboardController extends Controller
                 'grupo' => $a->grupo,
                 'discapacidad' => $a->discapacidad,
                 'foto_perfil' => $a->foto_perfil,
-                'tutor' => $a->tutores?->t1_nombre ?? 'Sin asignar',
+                'tutor' => $a->tutor?->t1_nombre ?? 'Sin asignar',
             ]);
 
         // Evento próximo más cercano

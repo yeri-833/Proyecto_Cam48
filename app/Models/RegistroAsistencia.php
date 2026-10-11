@@ -10,10 +10,15 @@ class RegistroAsistencia extends Model
     public $timestamps = true;
 
     protected $fillable = [
-        'id_persona', 'rol', 'fecha', 'hora'
+        'asistible_type', 'asistible_id', 'fecha', 'hora'
     ];
 
     protected $casts = [
         'fecha' => 'date',
     ];
+
+    public function asistible()
+    {
+        return $this->morphTo();
+    }
 }

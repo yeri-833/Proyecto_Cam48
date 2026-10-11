@@ -21,8 +21,13 @@ class Personal extends Model
         'activo' => 'boolean',
     ];
 
+    public function getNombreCompletoAttribute()
+    {
+        return strtoupper($this->attributes['nombre_completo'] ?? '');
+    }
+
     public function asistencias()
     {
-        return $this->hasMany(RegistroAsistencia::class, 'id_persona', 'id');
+        return $this->morphMany(RegistroAsistencia::class, 'asistible');
     }
 }
