@@ -2,6 +2,25 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo. El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [SemVer (Versionamiento Semántico)](https://semver.org/lang/es/).
 
+## [1.4.0] - 2026-10-11
+
+### Añadido
+- **Migración a Relaciones Polimórficas**: Refactorización de la tabla `registros_asistencia` para utilizar el patrón polimórfico nativo de Laravel (`asistible_type`, `asistible_id`), unificando los modelos `Alumno`, `Tutor` y `Personal`.
+- **Firma Criptográfica HMAC en Códigos QR**: Validación de autenticidad anti-clonación y anti-tampering (`hash_hmac` con `APP_KEY`) en el escaneo de asistencias.
+- **Limitadores de Tasa (Rate Limiting)**: Protección contra ataques de denegación de servicio (DoS) en `/escaner/procesar` (`throttle:60,1`) y `/api/telegram/sync` (`throttle:30,1`).
+- **Comando Artisan y Endpoint API de Sincronización Telegram**: Creación de `SyncTelegramUpdates` (`php artisan telegram:sync`) y ruta dedicada en `routes/api.php` desacoplada del ciclo web.
+- **Documentación Integral**: Rediseño completo de `README.md` con guías de instalación, arquitectura, colas y despliegue en producción.
+
+### Modificado
+- **Desacoplamiento de Servicios en Colas (`NotificarAsistenciaJob`)**: Refactorización del Job para recibir `WhatsAppService` y `TelegramService` mediante inyección de dependencias en `handle()`, previniendo errores de serialización en base de datos.
+- **Estandarización RESTful de Rutas**: Agrupación y adopción de `Route::resource` para los módulos `Personal`, `Tutores`, `Expedientes`, `Historial` y `Eventos` en `routes/web.php`.
+- **Protección de Datos y Reglas en .gitignore**: Exclusión automática de volcados SQL (`*.sql`), ejecutables `.phar`, respaldos (`*.bak`) y archivos de depuración.
+
+### Corregido
+- **Corrección Crítica de Recursión Infinita en `Personal.php`**: Corrección del accessor `getNombreCompletoAttribute()` para leer del array interno de atributos `$this->attributes['nombre_completo']`, evitando desbordamientos de pila (*Stack Overflow*).
+- **Consistencia de Rutas**: Alineación del parámetro `{matricula}` en la ruta de actualización de expedientes de alumnos.
+- **Higiene de Repositorio**: Eliminación del seguimiento en Git de volcados SQL que contenían datos personales (`respaldo.sql`), binario `composer.phar`, logs y scripts temporales.
+
 ---
 
 ## [1.3.0] - 2026-05-25

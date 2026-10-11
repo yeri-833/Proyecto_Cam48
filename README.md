@@ -1,58 +1,171 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# FamilyLock (CAM 48) - Sistema Integral de Asistencia y Expedientes Escolares
 
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="280" alt="Laravel Logo">
 </p>
 
-## About Laravel
+<p align="center">
+  <img src="https://img.shields.io/badge/PHP-8.3%2B-777BB4?style=for-the-badge&logo=php&logoColor=white" alt="PHP 8.3+">
+  <img src="https://img.shields.io/badge/Laravel-11%20%2F%2012-FF2D20?style=for-the-badge&logo=laravel&logoColor=white" alt="Laravel">
+  <img src="https://img.shields.io/badge/Vue.js-3.x-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white" alt="Vue 3">
+  <img src="https://img.shields.io/badge/Inertia.js-2.x-9553E9?style=for-the-badge&logo=inertia&logoColor=white" alt="Inertia.js">
+  <img src="https://img.shields.io/badge/TailwindCSS-3.x-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
+  <img src="https://img.shields.io/badge/MySQL-8.0-4479A1?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL">
+</p>
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 📌 Descripción del Proyecto
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+**FamilyLock** es una plataforma web desarrollada a la medida para el **Centro de Atención Múltiple No. 48 (CAM 48)**. Su objetivo primordial es garantizar la seguridad escolar, agilizar el control de asistencias de alumnos, personal docente y tutores, y mantener una comunicación directa e inmediata entre la institución educativa y las familias mediante notificaciones en tiempo real vía **Telegram** y **WhatsApp**.
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## 🚀 Características Principales
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- **Terminal Kiosco de Asistencia QR Seguro**:
+  - Lectura en vivo mediante cámara web o lector óptico de códigos de barras.
+  - Validación criptográfica **HMAC-SHA256** vinculada a la `APP_KEY` para prevenir clonación y falsificación de códigos QR.
+  - Cooldown de 5 minutos anti-lecturas accidentales y protección contra DoS mediante limitador de tasa (*Rate Limiting*).
+- **Procesamiento Asíncrono de Mensajería (Colas / Queues)**:
+  - Notificaciones inmediatas a tutores sobre entrada o salida escolar despachadas en segundo plano mediante `NotificarAsistenciaJob`.
+  - Garantiza respuesta sub-segundo en la terminal de escaneo durante horas pico escolares.
+- **Relaciones Polimórficas de Asistencia**:
+  - Estructura escalable de datos (`asistible_type`, `asistible_id`) que unifica el control de Alumnos, Tutores y Personal escolar.
+- **Integración con Telegram & WhatsApp**:
+  - Comando programado de sincronización de cuentas (`php artisan telegram:sync`).
+  - Avisos individuales, masivos y alertas de eventos escolares.
+- **Directorio y Expediente Digital**:
+  - Registro médico, grado, grupo, condición o discapacidad y fotografías optimizadas automáticamente con `Intervention Image`.
+  - Borrado lógico (*Soft Deletes*) para tutores y eventos para evitar pérdidas accidentales.
+- **Módulo de Estadísticas y Reconocimientos**:
+  - Gráficas interactivas de asistencia diaria y semanal.
+  - Ranking de *Padres Comprometidos* con exportación nativa a **Excel (.xlsx)** y **PDF**.
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+---
 
-## Agentic Development
+## 🛠️ Requisitos del Entorno
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+- **PHP**: `^8.3` con extensiones activas: `pdo_mysql`, `openssl`, `mbstring`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `fileinfo`, `gd` o `imagick`.
+- **Composer**: `^2.2`
+- **Node.js**: `^18.x` o `^20.x`
+- **NPM**: `^9.x` o `^10.x`
+- **Base de Datos**: MySQL `^8.0` o MariaDB `^10.4`
+- **Certificado SSL / HTTPS**: Obligatorio en producción para permitir el acceso del navegador a la cámara web en la terminal del kiosco.
 
+---
+
+## 📦 Instalación y Configuración Local
+
+### 1. Clonar el repositorio
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone https://github.com/yeri-833/Proyecto_Cam48.git
+cd Proyecto_Cam48
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### 2. Instalar dependencias
+```bash
+composer install
+npm install
+```
 
-## Contributing
+### 3. Configurar variables de entorno
+Copia el archivo base y ajusta tus credenciales:
+```bash
+copy .env.example .env
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Configura en tu `.env`:
+```ini
+APP_NAME=FamilyLock
+APP_ENV=local
+APP_KEY=
+APP_DEBUG=true
+APP_URL=http://localhost:8000
 
-## Code of Conduct
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=proyecto_colegio
+DB_USERNAME=root
+DB_PASSWORD=
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+QUEUE_CONNECTION=database
+SESSION_DRIVER=database
 
-## Security Vulnerabilities
+# TELEGRAM BOT
+TELEGRAM_BOT_TOKEN=tu_token_de_bot_aqui
+TELEGRAM_BOT_USERNAME=cam48_notificaciones_bot
+TELEGRAM_CHANNEL_ID=@cam48comunicados
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+# WHATSAPP API
+WHATSAPP_API_URL=https://tu-gateway-whatsapp.com
+WHATSAPP_API_TOKEN=tu_token_aqui
+```
 
-## License
+### 4. Generar clave de aplicación y enlazar almacenamiento
+```bash
+php artisan key:generate
+php artisan storage:link
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### 5. Ejecutar migraciones
+```bash
+php artisan migrate
+```
+
+### 6. Iniciar el entorno de desarrollo
+En terminales independientes (o mediante `npm run dev` / `composer run dev`):
+```bash
+# Servidor web local
+php artisan serve
+
+# Worker para procesamiento de notificaciones en cola
+php artisan queue:work --tries=3
+
+# Compilador de assets Vite
+npm run dev
+```
+
+---
+
+## ⚙️ Despliegue en Servidor de Producción (Linux / Ubuntu + Nginx)
+
+1. **Variables de entorno estrictas:**
+   ```ini
+   APP_ENV=production
+   APP_DEBUG=false
+   APP_URL=https://sistema.cam48.edu.mx
+   ```
+2. **Certificado SSL:** Instalar Let's Encrypt / Certbot (`sudo certbot --nginx`). Sin HTTPS, los navegadores modernos **bloquean el acceso a la cámara** para el escáner de asistencias.
+3. **Supervisor para Colas:** Mantener activo el demonio de Laravel Queue Worker:
+   ```ini
+   [program:familylock-worker]
+   process_name=%(program_name)s_%(process_num)02d
+   command=php /ruta/al/proyecto/artisan queue:work database --sleep=3 --tries=3 --max-time=3600
+   autostart=true
+   autorestart=true
+   user=www-data
+   numprocs=2
+   redirect_stderr=true
+   stdout_logfile=/ruta/al/proyecto/storage/logs/worker.log
+   ```
+4. **Programador de Tareas (Cron):**
+   ```bash
+   * * * * * cd /ruta/al/proyecto && php artisan schedule:run >> /dev/null 2>&1
+   ```
+
+---
+
+## 🧪 Pruebas Automatizadas
+
+Para ejecutar la suite de pruebas unitarias y de integración:
+```bash
+php artisan test
+```
+
+---
+
+## 📄 Licencia
+
+Este proyecto está bajo la licencia [MIT](LICENSE). Desarrollado para la administración escolar del Centro de Atención Múltiple No. 48.
