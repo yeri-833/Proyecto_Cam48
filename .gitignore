@@ -25,3 +25,15 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Database dumps and sensitive backups
+*.sql
+*.bak
+
+# Executables & phar binaries
+*.phar
+
+# Scratch files and test logs
+*_log.txt
+test_*.txt
+test_*.php
