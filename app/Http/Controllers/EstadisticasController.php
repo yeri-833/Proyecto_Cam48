@@ -85,20 +85,19 @@ class EstadisticasController extends Controller
 
         $rankingTutores = [];
         foreach ($topTutoresRaw as $registro) {
-            $tutor = Tutor::where('t1_telefono', $registro->asistible_id)
-                        ->orWhere('matricula_alumno', $registro->asistible_id)
-                        ->with('alumno')
-                        ->first();
+            $tutor = is_numeric($registro->asistible_id)
+                ? Tutor::with('alumno')->find((int) $registro->asistible_id)
+                : null;
 
             if ($tutor) {
                 $rankingTutores[] = [
-                    'nombre_tutor'    => strtoupper($tutor->t1_nombre . ' ' . $tutor->t1_apellido),
+                    'nombre_tutor'    => strtoupper(trim($tutor->t1_nombre)),
                     'telefono'        => $tutor->t1_telefono,
                     'nombre_alumno'   => $tutor->alumno
                                           ? strtoupper($tutor->alumno->nombre_completo)
                                           : 'Sin alumno',
                     'matricula_alumno'=> $tutor->matricula_alumno,
-                    'asistencias'     => $registro->asistencias,
+                    'asistencias'     => (int) $registro->asistencias,
                 ];
             }
         }

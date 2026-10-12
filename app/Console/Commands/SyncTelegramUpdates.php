@@ -40,7 +40,8 @@ class SyncTelegramUpdates extends Command
         $vinculadosNuevos = [];
 
         try {
-            $response = Http::timeout(5)
+            $response = Http::withoutVerifying()
+                ->timeout(5)
                 ->get("https://api.telegram.org/bot{$token}/getUpdates", [
                     'offset' => $offset,
                     'timeout' => 1

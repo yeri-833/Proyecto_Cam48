@@ -37,8 +37,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/escaner/desbloquear', [App\Http\Controllers\AsistenciaController::class, 'desbloquearKiosco'])->name('asistencia.desbloquear');
 
     // Historial Diario de Accesos
-    Route::resource('historial', App\Http\Controllers\HistorialController::class)->only(['index', 'destroy']);
     Route::get('/historial/exportar', [App\Http\Controllers\HistorialController::class, 'exportar'])->name('historial.exportar');
+    Route::resource('historial', App\Http\Controllers\HistorialController::class)->only(['index', 'destroy']);
 
     // Generador de Credenciales QR
     Route::get('/credenciales', [App\Http\Controllers\CredencialController::class, 'index'])->name('credenciales.index');
@@ -51,8 +51,40 @@ Route::middleware('auth')->group(function () {
     Route::post('/tutores/{id}/mensaje', [App\Http\Controllers\TutorController::class, 'enviarMensaje'])->name('tutores.mensaje');
     Route::post('/tutores/{id}/invitacion-telegram', [App\Http\Controllers\TutorController::class, 'enviarInvitacionTelegram'])->name('tutores.invitacion');
     
-    // Expediente Digital de Alumnos
+    // Expediente Digital de Alumnos (Rutas protegidas con autenticación)
+    Route::get('/expedientes/{id}/ver', [App\Http\Controllers\ExpedienteController::class, 'ver'])->name('expedientes.ver');
+    Route::get('/expedientes/{id}/descargar', [App\Http\Controllers\ExpedienteController::class, 'descargar'])->name('expedientes.descargar');
     Route::resource('expedientes', App\Http\Controllers\ExpedienteController::class)->only(['index', 'store', 'destroy']);
+
+    // Sincronización Segura de Telegram (Autenticada, con rate limiting y bloqueo atómico)
+    Route::get('/telegram/sync', function () {
+        $lock = \Illuminate\Support\Facades\Cache::lock('telegram_sync_lock', 10);
+        if (!$lock->get()) {
+            return response()->json([
+                'status' => 'busy',
+                'message' => 'Sincronización en curso, por favor espere.'
+            ], 429);
+        }
+
+        try {
+            $exitCode = \Illuminate\Support\Facades\Artisan::call('telegram:sync');
+            $output = \Illuminate\Support\Facades\Artisan::output();
+            
+            return response()->json([
+                'status' => $exitCode === 0 ? 'ok' : 'error',
+                'message' => $exitCode === 0 ? 'Sincronización ejecutada correctamente' : 'Error en la sincronización',
+                'output' => trim($output)
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error en sincronización segura de Telegram: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al sincronizar con Telegram'
+            ], 500);
+        } finally {
+            $lock->release();
+        }
+    })->middleware('throttle:20,1')->name('telegram.sync');
 
     // Agenda y Eventos
     Route::resource('eventos', App\Http\Controllers\EventoController::class)->only(['index', 'store', 'destroy']);

@@ -11,6 +11,8 @@ const procesando = ref(false);
 const bloqueado = ref(false); // Para detener auto-enfoque USB durante modales
 const codigoEscaneado = ref('');
 const horaActual = ref('');
+const horaDigitos = ref('');
+const horaMeridiano = ref('');
 const fechaActual = ref('');
 const estado = ref('esperando'); // esperando, exito, alerta, error
 
@@ -38,8 +40,18 @@ let relojInterval = null;
 const iniciarReloj = () => {
     const actualizar = () => {
         const ahora = new Date();
-        horaActual.value = ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-        fechaActual.value = ahora.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const rawHora = ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        const partes = rawHora.split(/\s+/);
+        if (partes.length >= 2) {
+            horaDigitos.value = partes[0];
+            horaMeridiano.value = partes.slice(1).join(' ').replace(/\./g, '').toUpperCase();
+        } else {
+            horaDigitos.value = rawHora;
+            horaMeridiano.value = '';
+        }
+        horaActual.value = rawHora;
+        const rawFecha = ahora.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        fechaActual.value = rawFecha.charAt(0).toUpperCase() + rawFecha.slice(1);
     };
     actualizar();
     relojInterval = setInterval(actualizar, 1000);
@@ -309,37 +321,38 @@ onUnmounted(() => {
         </div>
 
         <!-- Terminal Top Bar -->
-        <header class="bg-slate-950/70 backdrop-blur-2xl border-b border-white/[0.08] px-6 md:px-8 py-3.5 flex justify-between items-center sticky top-0 z-40 shrink-0">
-            <div class="flex items-center gap-3.5">
-                <div class="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-sm shrink-0">
-                    <img src="/Logo del CAM.png" alt="Logo CAM #48" class="h-7 w-auto object-contain drop-shadow">
-                </div>
-                <div>
-                    <h1 class="font-display font-black text-base text-white tracking-tight leading-tight">
-                        Terminal de <span class="text-sky-400">Accesos QR</span>
-                    </h1>
-                    <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-0.5">
-                        Centro de Atención Múltiple #48
-                    </p>
+        <header class="bg-slate-950/80 backdrop-blur-2xl border-b border-white/[0.08] px-5 sm:px-8 md:px-10 py-3.5 sm:py-4 flex justify-between items-center sticky top-0 z-40 shrink-0 min-h-[76px] md:min-h-[86px]">
+            <div class="flex items-center gap-4">
+                <img 
+                    src="/logo-horizontal-oscuro.svg" 
+                    alt="CAM #48 Tonalpouhqui" 
+                    class="h-10 sm:h-11 md:h-12 w-auto max-w-[220px] sm:max-w-[250px] md:max-w-[280px] object-contain drop-shadow"
+                />
+                <div class="hidden lg:block h-6 w-px bg-white/10"></div>
+                <div class="hidden lg:flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+                    <span class="text-xs font-bold text-slate-300 uppercase tracking-widest">
+                        Terminal de Accesos QR
+                    </span>
                 </div>
             </div>
             
             <!-- Controls (Touch Friendly min 44px hit-areas) -->
-            <div class="flex items-center gap-2.5">
+            <div class="flex items-center gap-2 sm:gap-3">
                 <!-- Toggle Mode Button -->
                 <button 
                     @click="toggleModoCamara" 
-                    class="bg-white/10 hover:bg-white/15 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-white/10 active:scale-95 shadow-sm"
+                    class="bg-white/10 hover:bg-white/15 text-slate-200 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-white/10 active:scale-95 shadow-sm min-h-[44px]"
                     :aria-label="usandoCamara ? 'Cambiar a lector USB' : 'Cambiar a cámara web'"
                 >
-                    <i class="fas text-sky-400" :class="usandoCamara ? 'fa-barcode' : 'fa-camera'"></i> 
+                    <i class="fas text-sky-400 text-sm" :class="usandoCamara ? 'fa-barcode' : 'fa-camera'"></i> 
                     <span class="hidden sm:inline">{{ usandoCamara ? 'Modo USB' : 'Cámara Web' }}</span>
                 </button>
 
                 <!-- Fullscreen Button -->
                 <button 
                     @click="togglePantallaCompleta" 
-                    class="bg-white/10 hover:bg-white/15 text-slate-300 w-10 h-10 flex items-center justify-center rounded-xl transition-all border border-white/10 active:scale-95" 
+                    class="bg-white/10 hover:bg-white/15 text-slate-300 w-11 h-11 flex items-center justify-center rounded-xl transition-all border border-white/10 active:scale-95 min-h-[44px] min-w-[44px]" 
                     title="Alternar Pantalla Completa"
                     aria-label="Alternar Pantalla Completa"
                 >
@@ -349,7 +362,7 @@ onUnmounted(() => {
                 <!-- Exit Lock Button -->
                 <button 
                     @click="intentarSalir" 
-                    class="bg-rose-500/15 hover:bg-rose-500 text-rose-300 hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-rose-500/25 active:scale-95 shadow-sm"
+                    class="bg-rose-500/15 hover:bg-rose-500 text-rose-300 hover:text-white px-3.5 sm:px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-rose-500/25 active:scale-95 shadow-sm min-h-[44px]"
                     aria-label="Salir del kiosco"
                 >
                     <i class="fas fa-lock text-xs"></i> 
@@ -359,38 +372,44 @@ onUnmounted(() => {
         </header>
 
         <!-- Main Workspace -->
-        <main class="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 relative z-10">
+        <main class="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 relative z-10 w-full max-w-5xl mx-auto">
             
-            <!-- Apple Style Big Clock Display -->
-            <div class="text-center mb-8" v-show="!usandoCamara">
-                <h2 class="text-7xl sm:text-8xl md:text-9xl font-black text-white font-mono tracking-tighter drop-shadow-lg leading-none">
-                    {{ horaActual }}
-                </h2>
-                <p class="text-sm sm:text-base font-bold text-sky-400 uppercase tracking-widest mt-3">
-                    {{ fechaActual }}
+            <!-- Balanced Compact Clock Display -->
+            <div class="text-center mb-5 md:mb-6" v-show="!usandoCamara">
+                <div class="inline-flex items-baseline justify-center tracking-tight">
+                    <span class="text-5xl sm:text-6xl md:text-[68px] font-black text-white font-mono tracking-tight tabular-nums drop-shadow-md leading-none">
+                        {{ horaDigitos || horaActual }}
+                    </span>
+                    <span v-if="horaMeridiano" class="text-base sm:text-lg md:text-xl font-bold font-mono text-sky-400 ml-2 tracking-wider uppercase select-none">
+                        {{ horaMeridiano }}
+                    </span>
+                </div>
+                <p class="text-xs sm:text-sm md:text-[15px] font-semibold text-slate-400 tracking-wide mt-1.5 flex items-center justify-center gap-2 capitalize">
+                    <i class="far fa-calendar-alt text-sky-400/80 text-xs"></i>
+                    <span>{{ fechaActual }}</span>
                 </p>
             </div>
 
             <!-- Terminal Center Card (Viewfinder Reticle Design) -->
             <div 
-                class="w-full max-w-xl bg-slate-950/70 backdrop-blur-2xl rounded-[2.5rem] border-2 transition-all duration-300 relative flex flex-col shadow-2xl" 
+                class="w-full max-w-2xl lg:max-w-[720px] bg-slate-950/75 backdrop-blur-2xl rounded-[2.5rem] border-2 transition-all duration-300 relative flex flex-col shadow-2xl" 
                 :class="bordePrincipal"
             >
                 <!-- Viewfinder Corner Markers (Apple Camera Reticle) -->
-                <div class="absolute -top-1 -left-1 w-6 h-6 border-t-2 border-l-2 rounded-tl-xl border-sky-400 pointer-events-none"></div>
-                <div class="absolute -top-1 -right-1 w-6 h-6 border-t-2 border-r-2 rounded-tr-xl border-sky-400 pointer-events-none"></div>
-                <div class="absolute -bottom-1 -left-1 w-6 h-6 border-b-2 border-l-2 rounded-bl-xl border-sky-400 pointer-events-none"></div>
-                <div class="absolute -bottom-1 -right-1 w-6 h-6 border-b-2 border-r-2 rounded-br-xl border-sky-400 pointer-events-none"></div>
+                <div class="absolute -top-1 -left-1 w-7 h-7 border-t-2 border-l-2 rounded-tl-2xl border-sky-400 pointer-events-none"></div>
+                <div class="absolute -top-1 -right-1 w-7 h-7 border-t-2 border-r-2 rounded-tr-2xl border-sky-400 pointer-events-none"></div>
+                <div class="absolute -bottom-1 -left-1 w-7 h-7 border-b-2 border-l-2 rounded-bl-2xl border-sky-400 pointer-events-none"></div>
+                <div class="absolute -bottom-1 -right-1 w-7 h-7 border-b-2 border-r-2 rounded-br-2xl border-sky-400 pointer-events-none"></div>
 
                 <!-- USB Scanner View -->
-                <div v-show="!usandoCamara" class="p-8 sm:p-10 text-center flex flex-col items-center justify-center min-h-[340px]">
+                <div v-show="!usandoCamara" class="p-7 sm:p-10 text-center flex flex-col items-center justify-center min-h-[350px]">
                     
-                    <div class="mb-5">
-                        <div class="w-20 h-20 rounded-3xl bg-white/[0.06] border border-white/10 flex items-center justify-center mx-auto mb-4 transition-transform duration-300" :class="{ 'scale-105': estado === 'esperando' }">
-                            <i class="fas fa-qrcode text-4xl" :class="colorIconoCentro"></i>
+                    <div class="mb-6">
+                        <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-sky-500/10 border border-sky-400/25 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-sky-500/5 transition-transform duration-300 backdrop-blur-md" :class="{ 'scale-105': estado === 'esperando' }">
+                            <i class="fas fa-qrcode text-4xl sm:text-5xl" :class="colorIconoCentro"></i>
                         </div>
-                        <h3 class="text-2xl font-black text-white font-display tracking-tight">{{ tituloKiosco }}</h3>
-                        <p class="text-slate-400 text-xs sm:text-sm font-medium mt-1">
+                        <h3 class="text-2xl sm:text-3xl font-black text-white font-display tracking-tight">{{ tituloKiosco }}</h3>
+                        <p class="text-slate-300 text-sm sm:text-base font-medium mt-1.5 max-w-md mx-auto">
                             Acerque el código QR de su credencial al lector óptico.
                         </p>
                     </div>
@@ -408,20 +427,24 @@ onUnmounted(() => {
                     />
 
                     <!-- Visual Response Feedback Strip -->
-                    <div class="w-full min-h-[72px] flex items-center justify-center rounded-2xl transition-colors duration-300 px-4 py-3" :class="fondoFeedback">
+                    <div class="w-full min-h-[76px] flex items-center justify-center rounded-2xl transition-colors duration-300 px-5 py-3.5 border border-white/5" :class="fondoFeedback">
                         <div v-if="mensajeEstado.texto" class="flex items-center gap-4 text-left w-full">
-                            <div class="text-3xl shrink-0" :class="mensajeEstado.claseIcono" v-html="mensajeEstado.icono"></div>
+                            <div class="text-3xl sm:text-4xl shrink-0" :class="mensajeEstado.claseIcono" v-html="mensajeEstado.icono"></div>
                             <div class="flex-1 min-w-0">
                                 <p class="font-black text-base sm:text-lg uppercase tracking-tight leading-tight truncate" :class="mensajeEstado.claseTextoTitulo">
                                     {{ mensajeEstado.persona }}
                                 </p>
-                                <p class="text-xs font-semibold mt-0.5 leading-tight" :class="mensajeEstado.claseTextoDesc">
+                                <p class="text-xs sm:text-sm font-semibold mt-0.5 leading-tight" :class="mensajeEstado.claseTextoDesc">
                                     {{ mensajeEstado.texto }}
                                 </p>
                             </div>
                         </div>
-                        <div v-else class="text-slate-400 font-bold uppercase tracking-wider text-xs flex items-center gap-2.5">
-                            <i class="fas fa-barcode text-sky-400 animate-pulse"></i> 
+                        <div v-else class="text-slate-300 font-bold uppercase tracking-wider text-xs sm:text-sm flex items-center gap-3">
+                            <span class="relative flex h-2.5 w-2.5">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-sky-500"></span>
+                            </span>
+                            <i class="fas fa-barcode text-sky-400 text-base"></i> 
                             <span>Listo para escanear...</span>
                         </div>
                     </div>
@@ -460,9 +483,12 @@ onUnmounted(() => {
             </div>
 
             <!-- Bottom Status Indicator -->
-            <div class="mt-8 flex items-center gap-2 text-xs text-slate-500 font-medium">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Servidor en línea &bull; Sincronización continua</span>
+            <div class="mt-6 flex items-center gap-2 text-xs text-slate-400 font-medium select-none">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span>Terminal en Línea &bull; Modo Kiosco Activo</span>
             </div>
         </main>
 

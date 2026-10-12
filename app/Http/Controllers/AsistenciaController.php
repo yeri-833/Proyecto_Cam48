@@ -87,10 +87,9 @@ class AsistenciaController extends Controller
             $fechaHoy = Carbon::today()->toDateString();
             $horaActual = Carbon::now()->toTimeString();
 
-            // Buscar en Alumnos
-            if ($rol === 'Alumno' || $rol === 'Tutor') {
+            // Buscar según el rol especificado en la credencial de forma estrictamente aislada
+            if ($rol === 'Alumno') {
                 $alumno = Alumno::where('matricula', $idPersona)->first();
-                
                 if ($alumno) {
                     if (!$alumno->activo) {
                         return response()->json([
@@ -100,22 +99,17 @@ class AsistenciaController extends Controller
                     }
                     $nombreCompleto = $alumno->nombre_completo;
                     $personaModel = $alumno;
-                    $rol = 'Alumno';
-                } else {
-                    // Buscar en Tutores si no se halló como Alumno
-                    $tutor = Tutor::where('t1_telefono', $idPersona)
-                        ->orWhere('matricula_alumno', $idPersona)
-                        ->first();
-                    
-                    if ($tutor) {
-                        $nombreCompleto = strtoupper($tutor->t1_nombre . ' ' . $tutor->t1_apellido);
-                        $personaModel = $tutor;
-                        $rol = 'Tutor';
-                    }
+                }
+            } elseif ($rol === 'Tutor') {
+                // Búsqueda estricta por ID real de la tabla tutores
+                $tutor = is_numeric($idPersona) ? Tutor::find((int) $idPersona) : null;
+                if ($tutor) {
+                    $nombreCompleto = $tutor->nombre_completo;
+                    $personaModel = $tutor;
                 }
             } else {
-                // Buscar en Personal
-                $personal = Personal::where('id', $idPersona)->first();
+                // Buscar exclusivamente en Personal por id numérico
+                $personal = is_numeric($idPersona) ? Personal::find((int) $idPersona) : Personal::where('id', $idPersona)->first();
                 if ($personal) {
                     if (!$personal->activo) {
                         return response()->json([
@@ -123,7 +117,7 @@ class AsistenciaController extends Controller
                             'msg' => 'El trabajador está inactivo o de baja'
                         ]);
                     }
-                    $nombreCompleto = strtoupper($personal->nombre_completo);
+                    $nombreCompleto = $personal->nombre_completo;
                     $personaModel = $personal;
                 }
             }
@@ -138,25 +132,33 @@ class AsistenciaController extends Controller
 
             // Cooldown de 5 minutos para evitar duplicados accidentales
             $ultimoRegistro = $personaModel->asistencias()
-                ->where('fecha', $fechaHoy)
-                ->orderBy('hora', 'desc')
+                ->whereDate('fecha', $fechaHoy)
+                ->latest('id')
                 ->first();
 
             if ($ultimoRegistro) {
-                $ultimoTiempo = Carbon::createFromFormat('Y-m-d H:i:s', $fechaHoy . ' ' . $ultimoRegistro->hora);
-                if (Carbon::now()->diffInSeconds($ultimoTiempo) < 300) {
-                    return response()->json([
-                        'status' => 'warning',
-                        'msg' => 'Pase registrado recientemente.',
-                        'persona' => $nombreCompleto
-                    ]);
+                try {
+                    $ultimoTiempo = Carbon::parse($fechaHoy . ' ' . $ultimoRegistro->hora);
+
+                    if (abs(Carbon::now()->diffInSeconds($ultimoTiempo)) < 300) {
+                        return response()->json([
+                            'status' => 'warning',
+                            'msg' => 'Pase registrado recientemente.',
+                            'persona' => $nombreCompleto
+                        ]);
+                    }
+                } catch (\Exception $exTime) {
+                    Log::warning('Error calculando cooldown de asistencia: ' . $exTime->getMessage());
                 }
             }
 
-            // Registrar la asistencia
+            // Registrar la asistencia polimórfica (y conservar id_persona y rol para transición segura)
             $personaModel->asistencias()->create([
+                'id_persona' => (string) $idPersona,
+                'rol' => $rol,
                 'fecha' => $fechaHoy,
-                'hora' => $horaActual
+                'hora' => $horaActual,
+                'modo_registro' => 'QR'
             ]);
 
             // =========== ALERTAS AUTOMÁTICAS (WHATSAPP + TELEGRAM) ===========

@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import CredencialCard from '@/Components/CredencialCard.vue';
 import { Head } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 import QRCode from 'qrcode';
@@ -22,10 +23,15 @@ const props = defineProps({
 const filtro = ref('alumnos');
 const busqueda = ref('');
 const mostrarModal = ref(false);
+const isCardFlipped = ref(false);
+const modoImpresionIndividual = ref('ambas'); // 'ambas' | 'frente' | 'reverso'
+
 const impresionMasiva = ref(false);
+const modoImpresionMasiva = ref('ambas'); // 'ambas' | 'frentes' | 'reversos'
 const credencialActiva = ref(null);
 const qrIndividualSrc = ref('');
 const qrMasivoUrls = ref({});
+const cicloEscolar = ref('Ciclo Escolar 2025-2026');
 
 // Computar lista filtrada según el rol y la búsqueda
 const listaActual = computed(() => {
@@ -45,14 +51,15 @@ const listaFiltrada = computed(() => {
     );
 });
 
-// Generador de código QR (Retorna Data URL)
+// Generador de código QR con alta densidad y zona de silencio óptima (320px)
+// CONTRATO CRIPTOGRÁFICO INTRACTABLE: id, rol, signature
 const generarQrDataUrl = async (item) => {
     try {
-        const payload = JSON.stringify({ id: String(item.id), rol: item.rol });
+        const payload = JSON.stringify({ id: String(item.id), rol: item.rol, signature: item.signature });
         return await QRCode.toDataURL(payload, { 
-            width: 180, 
+            width: 320, 
             margin: 1, 
-            color: { dark: '#0f172a', light: '#ffffff' } 
+            color: { dark: '#102944', light: '#ffffff' } 
         });
     } catch (e) {
         console.error("Error generando QR", e);
@@ -62,12 +69,19 @@ const generarQrDataUrl = async (item) => {
 
 const abrirVistaPrevia = async (item) => {
     credencialActiva.value = item;
+    isCardFlipped.value = false;
+    modoImpresionIndividual.value = 'ambas';
     qrIndividualSrc.value = await generarQrDataUrl(item);
     mostrarModal.value = true;
 };
 
+const girarCredencial = () => {
+    isCardFlipped.value = !isCardFlipped.value;
+};
+
 const prepararImpresionMasiva = async () => {
     impresionMasiva.value = true;
+    modoImpresionMasiva.value = 'ambas';
     qrMasivoUrls.value = {};
     
     for (const item of listaFiltrada.value) {
@@ -81,18 +95,6 @@ const cerrarImpresionMasiva = () => {
 
 const imprimirPantalla = () => {
     window.print();
-};
-
-const getRolColor = (rol) => {
-    if (rol === 'Alumno') return 'bg-sky-500 text-white';
-    if (rol === 'Tutor') return 'bg-amber-500 text-white';
-    return 'bg-purple-600 text-white';
-};
-
-const getRolBarColor = (rol) => {
-    if (rol === 'Alumno') return 'bg-sky-500';
-    if (rol === 'Tutor') return 'bg-amber-500';
-    return 'bg-purple-600';
 };
 </script>
 
@@ -114,7 +116,7 @@ const getRolBarColor = (rol) => {
                         Credenciales <span class="text-gradient-primary">Institucionales</span>
                     </h1>
                     <p class="text-slate-500 dark:text-slate-400 font-medium text-xs sm:text-sm mt-1">
-                        Generación e impresión de tarjetas de identidad escolar con código QR.
+                        Credenciales PVC CR80 con doble cara, giro 3D interactivo y código QR de acceso seguro.
                     </p>
                 </div>
                 
@@ -186,7 +188,7 @@ const getRolBarColor = (rol) => {
                                     </span>
                                 </td>
                                 <td>
-                                    <p class="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase leading-tight">
+                                    <p class="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase leading-tight font-display">
                                         {{ item.nombre }} {{ item.apellido }}
                                     </p>
                                 </td>
@@ -209,7 +211,7 @@ const getRolBarColor = (rol) => {
                                             class="btn-ghost"
                                         >
                                             <i class="fas fa-id-card text-sky-500"></i>
-                                            <span>Vista Previa</span>
+                                            <span>Vista Previa 3D</span>
                                         </button>
                                     </div>
                                 </td>
@@ -231,137 +233,288 @@ const getRolBarColor = (rol) => {
             </div>
         </div>
 
-        <!-- Single Preview Modal (Apple Presentation Card) -->
+        <!-- Single Preview Modal (Apple Identification Viewer with 3D Flip) -->
         <div v-show="mostrarModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" v-cloak>
-            <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-md no-print" @click="mostrarModal = false"></div>
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-xl no-print transition-opacity duration-300" @click="mostrarModal = false"></div>
             
-            <div class="flex flex-col items-center z-10">
-                <!-- Tarjeta PVC Diseño Apple School -->
-                <div class="bg-white w-[236px] h-[370px] rounded-3xl flex flex-col overflow-hidden mb-6 border border-slate-200 shadow-2xl relative select-none">
-                    <!-- Accent bar -->
-                    <div class="h-3.5 w-full shrink-0" :class="getRolBarColor(credencialActiva?.rol)"></div>
-                    
-                    <div class="p-4 flex-1 flex flex-col items-center justify-between text-center w-full">
-                        <!-- Header -->
-                        <div class="flex flex-col items-center w-full">
-                            <img src="/Logo del CAM.png" alt="Logo CAM #48" class="h-10 mb-1.5 object-contain">
-                            <p class="text-[9px] font-black text-slate-800 uppercase tracking-widest leading-tight m-0">
-                                Centro de Atención Múltiple #48
-                            </p>
-                            <p class="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider mt-0.5 m-0">
-                                Nanchital, Veracruz
-                            </p>
+            <div class="relative z-10 w-full max-w-lg bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden flex flex-col items-center p-5 sm:p-6 no-print animate-scale-in">
+                
+                <!-- Modal Top Header -->
+                <div class="w-full flex items-center justify-between pb-3 mb-2 border-b border-slate-100 dark:border-white/[0.08]">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center text-sm shadow-xs">
+                            <i class="fas fa-id-card"></i>
                         </div>
-
-                        <!-- Portrait & QR -->
-                        <div class="my-auto w-full flex flex-col justify-center items-center py-2 relative">
-                            <div v-if="credencialActiva?.foto_perfil" class="w-24 h-24 rounded-2xl overflow-hidden border-2 border-slate-100 shadow-md bg-slate-50 z-10">
-                                <img :src="`/storage/${credencialActiva.foto_perfil}`" class="w-full h-full object-cover" alt="Foto">
-                            </div>
-                            <div v-else class="w-24 h-24 rounded-2xl border-2 border-slate-100 shadow-md bg-slate-50 flex items-center justify-center text-slate-300 z-10">
-                                <i class="fas fa-user text-4xl"></i>
-                            </div>
-                            
-                            <div class="absolute -bottom-3 -right-1 p-1 bg-white border border-slate-200 shadow-md rounded-xl z-20">
-                                <img :src="qrIndividualSrc" class="w-11 h-11 object-contain" alt="QR Code">
-                            </div>
-                        </div>
-
-                        <!-- Person Details -->
-                        <div class="w-full flex flex-col items-center mb-0.5">
-                            <h2 class="text-xs font-black uppercase leading-tight text-slate-800 px-2 m-0 line-clamp-2">
-                                {{ credencialActiva?.nombre }} {{ credencialActiva?.apellido }}
-                            </h2>
-                            <p class="text-[9px] font-mono font-bold text-slate-500 mt-1 mb-1.5 m-0">
-                                {{ credencialActiva?.id }}
+                        <div>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white font-display">
+                                Vista Previa de Credencial
+                            </h3>
+                            <p class="text-[10px] font-medium text-slate-400">
+                                Estándar CR80 doble cara • CAM #48 Tonalpouhqui
                             </p>
-                            <span class="px-3.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider inline-block shadow-sm" :class="getRolColor(credencialActiva?.rol)">
-                                {{ credencialActiva?.rol }}
-                            </span>
                         </div>
                     </div>
+                    <button 
+                        @click="mostrarModal = false"
+                        class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-white flex items-center justify-center transition-colors"
+                        aria-label="Cerrar modal"
+                    >
+                        <i class="fas fa-times text-xs"></i>
+                    </button>
+                </div>
 
-                    <div class="bg-slate-50 py-2 text-center border-t border-slate-100 shrink-0 w-full">
-                        <p class="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest m-0">Ciclo Escolar 2025-2026</p>
+                <!-- Refined Controls Bar (No Text Wrapping, Clear Visual Separation) -->
+                <div class="w-full py-2 px-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-white/5 mb-3 flex flex-col gap-1.5">
+                    <div class="flex items-center justify-between">
+                        <!-- Current Face Indicator Badge -->
+                        <span 
+                            class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shadow-xs"
+                            :class="isCardFlipped ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300' : 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300'"
+                        >
+                            <i :class="isCardFlipped ? 'fas fa-qrcode text-xs' : 'fas fa-user text-xs'"></i>
+                            {{ isCardFlipped ? 'Cara Posterior' : 'Cara Frontal' }}
+                        </span>
+
+                        <!-- Flip Button with Adequate Spacing -->
+                        <button 
+                            @click="girarCredencial"
+                            class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-xs border border-slate-200/80 dark:border-white/10 flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <i class="fas fa-sync-alt text-[11px] text-sky-500 transition-transform duration-500" :class="{ 'rotate-180': isCardFlipped }"></i>
+                            <span>Girar credencial</span>
+                        </button>
+                    </div>
+
+                    <!-- Subtle helper caption -->
+                    <p class="text-[9.5px] text-slate-400 text-center m-0 leading-tight">
+                        Haz clic sobre la tarjeta o presiona <kbd class="px-1 py-0.5 text-[8.5px] font-mono bg-white dark:bg-slate-700 rounded border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300">Espacio</kbd> para girar 180°
+                    </p>
+                </div>
+
+                <!-- Credential Card 3D Preview Component -->
+                <div class="my-1 flex justify-center w-full">
+                    <CredencialCard 
+                        v-if="credencialActiva" 
+                        :item="credencialActiva" 
+                        :qr-src="qrIndividualSrc" 
+                        :ciclo="cicloEscolar"
+                        :is-flipped="isCardFlipped"
+                        mode="interactive"
+                        @update:is-flipped="isCardFlipped = $event"
+                    />
+                </div>
+
+                <!-- Print Options Segmented Controller -->
+                <div class="w-full mt-3 pt-2.5 border-t border-slate-100 dark:border-white/[0.08]">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Modo de Impresión Individual:
+                        </span>
+                        <span class="text-[9px] font-mono font-medium text-slate-400">
+                            CR80: 53.98 × 85.60 mm
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-[10.5px] font-bold">
+                        <button 
+                            @click="modoImpresionIndividual = 'ambas'"
+                            :class="modoImpresionIndividual === 'ambas' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'"
+                            class="py-1.5 rounded-lg transition-all"
+                        >
+                            Ambas Caras
+                        </button>
+                        <button 
+                            @click="modoImpresionIndividual = 'frente'"
+                            :class="modoImpresionIndividual === 'frente' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'"
+                            class="py-1.5 rounded-lg transition-all"
+                        >
+                            Solo Frente
+                        </button>
+                        <button 
+                            @click="modoImpresionIndividual = 'reverso'"
+                            :class="modoImpresionIndividual === 'reverso' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'"
+                            class="py-1.5 rounded-lg transition-all"
+                        >
+                            Solo Reverso
+                        </button>
                     </div>
                 </div>
                 
-                <div class="flex gap-3 no-print">
-                    <button @click="mostrarModal = false" class="btn-ghost bg-white/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                <!-- Modal Action Buttons -->
+                <div class="w-full flex items-center justify-between gap-3 pt-3 mt-1">
+                    <button 
+                        @click="mostrarModal = false" 
+                        class="btn-secondary text-xs flex-1"
+                    >
                         Cerrar
                     </button>
-                    <button @click="imprimirPantalla" class="btn-premium">
-                        <i class="fas fa-print text-xs"></i> Imprimir Credencial
+                    <button 
+                        @click="imprimirPantalla" 
+                        class="btn-premium text-xs flex-1 flex items-center justify-center gap-2"
+                    >
+                        <i class="fas fa-print text-xs"></i> 
+                        <span>Imprimir {{ modoImpresionIndividual === 'ambas' ? 'Doble Cara' : modoImpresionIndividual === 'frente' ? 'Frente' : 'Reverso' }}</span>
                     </button>
                 </div>
+            </div>
+
+            <!-- Single Print Shell (Strictly Flat CR80 Cards for Physical Paper Output) -->
+            <div class="hidden print:block print:fixed print:inset-0 print:m-0 print:p-0 print:bg-white z-[9999]">
+                <!-- Caso 1: Ambas caras (Página 1 Frente, Página 2 Reverso) -->
+                <template v-if="modoImpresionIndividual === 'ambas'">
+                    <div class="print:block page-break">
+                        <CredencialCard 
+                            v-if="credencialActiva" 
+                            :item="credencialActiva" 
+                            :qr-src="qrIndividualSrc" 
+                            :ciclo="cicloEscolar" 
+                            mode="frente"
+                        />
+                    </div>
+                    <div class="print:block">
+                        <CredencialCard 
+                            v-if="credencialActiva" 
+                            :item="credencialActiva" 
+                            :qr-src="qrIndividualSrc" 
+                            :ciclo="cicloEscolar" 
+                            mode="reverso"
+                        />
+                    </div>
+                </template>
+
+                <!-- Caso 2: Solo Frente -->
+                <template v-else-if="modoImpresionIndividual === 'frente'">
+                    <div class="print:block">
+                        <CredencialCard 
+                            v-if="credencialActiva" 
+                            :item="credencialActiva" 
+                            :qr-src="qrIndividualSrc" 
+                            :ciclo="cicloEscolar" 
+                            mode="frente"
+                        />
+                    </div>
+                </template>
+
+                <!-- Caso 3: Solo Reverso -->
+                <template v-else-if="modoImpresionIndividual === 'reverso'">
+                    <div class="print:block">
+                        <CredencialCard 
+                            v-if="credencialActiva" 
+                            :item="credencialActiva" 
+                            :qr-src="qrIndividualSrc" 
+                            :ciclo="cicloEscolar" 
+                            mode="reverso"
+                        />
+                    </div>
+                </template>
             </div>
         </div>
 
         <!-- Mass Print View (Takes over the entire screen when active) -->
         <div v-show="impresionMasiva" class="fixed inset-0 bg-slate-100 dark:bg-slate-900 z-[200] overflow-y-auto print:static print:bg-white print:overflow-visible">
             
-            <div class="bg-white dark:bg-slate-800 p-5 shadow-sm sticky top-0 z-50 flex flex-col sm:flex-row justify-between items-center gap-4 no-print border-b border-slate-200 dark:border-slate-700">
-                <div>
-                    <h2 class="text-xl font-black text-slate-800 dark:text-white font-display">Cola de Impresión</h2>
-                    <p class="text-xs font-medium text-slate-400 mt-0.5">Se han preparado {{ listaFiltrada.length }} credenciales con códigos QR.</p>
+            <!-- Controls bar (No Print) -->
+            <div class="bg-white dark:bg-slate-800 p-5 shadow-sm sticky top-0 z-50 flex flex-col md:flex-row justify-between items-center gap-4 no-print border-b border-slate-200 dark:border-slate-700">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center text-lg">
+                        <i class="fas fa-copy"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-black text-slate-800 dark:text-white font-display">Impresión Masiva Doble Cara</h2>
+                        <p class="text-xs font-medium text-slate-400 mt-0.5">
+                            {{ listaFiltrada.length }} credenciales preparadas para hojas A4 (cuadrícula 3 × 3).
+                        </p>
+                    </div>
                 </div>
-                <div class="flex gap-3">
+
+                <!-- Print Mode Selector -->
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-700 text-xs font-bold">
+                        <button 
+                            @click="modoImpresionMasiva = 'ambas'"
+                            :class="modoImpresionMasiva === 'ambas' ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-300'"
+                            class="px-3 py-1.5 rounded-lg transition-all"
+                        >
+                            Frentes y Reversos
+                        </button>
+                        <button 
+                            @click="modoImpresionMasiva = 'frentes'"
+                            :class="modoImpresionMasiva === 'frentes' ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-300'"
+                            class="px-3 py-1.5 rounded-lg transition-all"
+                        >
+                            Solo Frentes
+                        </button>
+                        <button 
+                            @click="modoImpresionMasiva = 'reversos'"
+                            :class="modoImpresionMasiva === 'reversos' ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-300'"
+                            class="px-3 py-1.5 rounded-lg transition-all"
+                        >
+                            Solo Reversos
+                        </button>
+                    </div>
+
                     <button @click="cerrarImpresionMasiva" class="btn-ghost">
-                        Volver a la Lista
+                        Volver
                     </button>
-                    <button @click="imprimirPantalla" class="btn-premium">
-                        <i class="fas fa-print text-xs"></i> Imprimir Todo (A4)
+                    <button @click="imprimirPantalla" class="btn-premium flex items-center gap-2">
+                        <i class="fas fa-print text-xs"></i> Imprimir en A4
                     </button>
                 </div>
             </div>
             
+            <!-- Cards Container -->
             <div class="max-w-6xl mx-auto p-8 print:p-0 print:max-w-none print:w-full">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 print:grid-cols-3 print:gap-4 print:block">
-                    <template v-for="item in listaFiltrada" :key="'masivo-' + item.id">
-                        <div class="bg-white w-[236px] h-[370px] rounded-3xl flex flex-col overflow-hidden border border-slate-200 shadow-md relative mx-auto print:float-left print:m-2 print:shadow-none print:border-slate-300 print:break-inside-avoid">
-                            <div class="h-3.5 w-full shrink-0" :class="getRolBarColor(item.rol)"></div>
-                            
-                            <div class="p-4 flex-1 flex flex-col items-center justify-between text-center w-full">
-                                <div class="flex flex-col items-center w-full">
-                                    <img src="/Logo del CAM.png" alt="Logo CAM #48" class="h-10 mb-1.5 object-contain">
-                                    <p class="text-[9px] font-black text-slate-800 uppercase tracking-widest leading-tight m-0">
-                                        Centro de Atención Múltiple #48
-                                    </p>
-                                    <p class="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider mt-0.5 m-0">
-                                        Nanchital, Veracruz
-                                    </p>
-                                </div>
-                                <div class="my-auto w-full flex flex-col justify-center items-center py-2 relative">
-                                    <div v-if="item.foto_perfil" class="w-24 h-24 rounded-2xl overflow-hidden border-2 border-slate-100 shadow-md bg-slate-50 z-10 print:border-slate-200 print:shadow-none">
-                                        <img :src="`/storage/${item.foto_perfil}`" class="w-full h-full object-cover" alt="Foto">
-                                    </div>
-                                    <div v-else class="w-24 h-24 rounded-2xl border-2 border-slate-100 shadow-md bg-slate-50 flex items-center justify-center text-slate-300 z-10 print:border-slate-200 print:shadow-none">
-                                        <i class="fas fa-user text-4xl"></i>
-                                    </div>
-                                    
-                                    <div class="absolute -bottom-3 -right-1 p-1 bg-white border border-slate-200 shadow-md rounded-xl z-20 print:shadow-none">
-                                        <img :src="qrMasivoUrls[item.id]" class="w-11 h-11 object-contain" alt="QR" v-if="qrMasivoUrls[item.id]">
-                                        <div v-else class="w-11 h-11 bg-slate-100 animate-pulse rounded-lg"></div>
-                                    </div>
-                                </div>
-                                <div class="w-full flex flex-col items-center mb-0.5">
-                                    <h2 class="text-xs font-black uppercase leading-tight text-slate-800 px-2 m-0 line-clamp-2">
-                                        {{ item.nombre }} {{ item.apellido }}
-                                    </h2>
-                                    <p class="text-[9px] font-mono font-bold text-slate-500 mt-1 mb-1.5 m-0">
-                                        {{ item.id }}
-                                    </p>
-                                    <span class="px-3.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider inline-block print:border print:border-slate-300" :class="getRolColor(item.rol)">
-                                        {{ item.rol }}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="bg-slate-50 py-2 text-center border-t border-slate-100 shrink-0 w-full print:bg-white">
-                                <p class="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest m-0">Ciclo Escolar 2025-2026</p>
-                            </div>
-                        </div>
-                    </template>
+                
+                <!-- SECCIÓN DE FRENTES (Se muestra si modo es 'ambas' o 'frentes') -->
+                <div 
+                    v-if="modoImpresionMasiva === 'ambas' || modoImpresionMasiva === 'frentes'"
+                    class="mb-12 print:mb-0"
+                    :class="{ 'page-break': modoImpresionMasiva === 'ambas' }"
+                >
+                    <div class="mb-4 no-print flex items-center justify-between border-b pb-2">
+                        <h3 class="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider font-display">
+                            Páginas de Frentes (Identidad y Fotografías)
+                        </h3>
+                        <span class="text-xs text-slate-400 font-medium">Cuadrícula 3x3 por hoja A4</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 print:grid-cols-3 print:gap-2 print:block">
+                        <template v-for="item in listaFiltrada" :key="'frente-' + item.id">
+                            <CredencialCard 
+                                :item="item" 
+                                :qr-src="qrMasivoUrls[item.id]" 
+                                :ciclo="cicloEscolar" 
+                                mode="frente"
+                                :is-mass-print="true" 
+                            />
+                        </template>
+                    </div>
                 </div>
+
+                <!-- SECCIÓN DE REVERSOS (Se muestra si modo es 'ambas' o 'reversos') -->
+                <div 
+                    v-if="modoImpresionMasiva === 'ambas' || modoImpresionMasiva === 'reversos'"
+                    class="mb-12 print:mb-0"
+                >
+                    <div class="mb-4 no-print flex items-center justify-between border-b pb-2">
+                        <h3 class="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider font-display">
+                            Páginas de Reversos (Códigos QR e Instrucciones)
+                        </h3>
+                        <span class="text-xs text-slate-400 font-medium">Mismo orden emparejado para doble cara</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 print:grid-cols-3 print:gap-2 print:block">
+                        <template v-for="item in listaFiltrada" :key="'reverso-' + item.id">
+                            <CredencialCard 
+                                :item="item" 
+                                :qr-src="qrMasivoUrls[item.id]" 
+                                :ciclo="cicloEscolar" 
+                                mode="reverso"
+                                :is-mass-print="true" 
+                            />
+                        </template>
+                    </div>
+                </div>
+
             </div>
         </div>
 
@@ -375,9 +528,18 @@ const getRolBarColor = (rol) => {
     }
     body {
         background-color: white !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
     @page {
-        margin: 0.5cm;
+        size: A4 portrait;
+        margin: 8mm 6mm;
+    }
+    .page-break {
+        page-break-after: always !important;
+        break-after: page !important;
     }
 }
 </style>

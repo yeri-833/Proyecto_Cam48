@@ -21,10 +21,7 @@ class EscaneoSeguridadTest extends TestCase
             'rol' => 'Alumno'
         ]);
 
-        $user = User::first();
-        if (!$user) {
-            $this->markTestSkipped('No hay usuarios para probar.');
-        }
+        $user = User::first() ?? User::factory()->create();
 
         $response = $this->actingAs($user)->postJson('/escaner/procesar', [
             'qr_data' => $qrDataInvalido
@@ -48,7 +45,7 @@ class EscaneoSeguridadTest extends TestCase
             'signature' => 'firmafalsainventada123'
         ]);
 
-        $user = User::first();
+        $user = User::first() ?? User::factory()->create();
         $response = $this->actingAs($user)->postJson('/escaner/procesar', [
             'qr_data' => $qrDataInvalido
         ]);
@@ -78,7 +75,7 @@ class EscaneoSeguridadTest extends TestCase
             'signature' => $firmaAutentica
         ]);
 
-        $user = User::first();
+        $user = User::first() ?? User::factory()->create();
         $response = $this->actingAs($user)->postJson('/escaner/procesar', [
             'qr_data' => $qrDataAutentico
         ]);

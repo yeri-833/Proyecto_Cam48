@@ -1,0 +1,157 @@
+<?php
+
+namespace Tests\Feature;
+
+use Tests\TestCase;
+use App\Models\User;
+use App\Models\Alumno;
+use App\Models\ArchivoSistema;
+use App\Models\RegistroAsistencia;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Storage;
+
+class SeguridadYAutorizacionTest extends TestCase
+{
+    /**
+     * Un usuario invitado (sin iniciar sesión) no debe acceder a expedientes escolares.
+     */
+    public function test_invitado_no_puede_acceder_a_expedientes(): void
+    {
+        $responseIndex = $this->get('/expedientes');
+        $responseIndex->assertRedirect('/login');
+
+        $responseVer = $this->get('/expedientes/9999/ver');
+        $responseVer->assertRedirect('/login');
+
+        $responseDescargar = $this->get('/expedientes/9999/descargar');
+        $responseDescargar->assertRedirect('/login');
+    }
+
+    /**
+     * Un usuario con rol normal (docente) no debe tener autorización para eliminar registros (Gate eliminar-registros).
+     */
+    public function test_docente_no_puede_eliminar_registros_protegidos(): void
+    {
+        $docente = User::factory()->create(['role' => 'docente']);
+
+        $asistencia = RegistroAsistencia::create([
+            'asistible_type' => Alumno::class,
+            'asistible_id' => 'TEST_DOC_DEL',
+            'fecha' => Carbon::today()->toDateString(),
+            'hora' => Carbon::now()->toTimeString(),
+        ]);
+
+        $responseHistorial = $this->actingAs($docente)->delete("/historial/{$asistencia->id}");
+        $responseHistorial->assertStatus(403);
+
+        $archivo = ArchivoSistema::create([
+            'matricula' => 'TEST_DOC_DEL',
+            'nombre_original' => 'documento.pdf',
+            'nombre_servidor' => 'test_file.pdf',
+            'tipo_mime' => 'application/pdf',
+            'tamano_bytes' => 1024,
+            'fecha_subida' => Carbon::now(),
+        ]);
+
+        $responseExpediente = $this->actingAs($docente)->delete("/expedientes/{$archivo->id}");
+        $responseExpediente->assertStatus(403);
+    }
+
+    /**
+     * Un administrador sí debe tener autorización para eliminar registros.
+     */
+    public function test_administrador_puede_eliminar_registros(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $asistencia = RegistroAsistencia::create([
+            'asistible_type' => Alumno::class,
+            'asistible_id' => 'TEST_ADM_DEL',
+            'fecha' => Carbon::today()->toDateString(),
+            'hora' => Carbon::now()->toTimeString(),
+        ]);
+
+        $responseHistorial = $this->actingAs($admin)->delete("/historial/{$asistencia->id}");
+        $responseHistorial->assertStatus(302); // Redirect back with success message
+        $this->assertDatabaseMissing('registros_asistencia', ['id' => $asistencia->id]);
+    }
+
+    /**
+     * El registro público no debe permitir escalamiento de privilegios inyectando role=admin.
+     */
+    public function test_registro_publico_ignora_rol_admin_inyectado(): void
+    {
+        $email = 'nuevo_usuario_' . time() . '@cam48.test';
+
+        $response = $this->post('/register', [
+            'name' => 'Usuario Aspirante',
+            'email' => $email,
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'role' => 'admin', // Intento malicioso de asignarse admin
+        ]);
+
+        $response->assertRedirect('/dashboard');
+
+        $user = User::where('email', $email)->first();
+        $this->assertNotNull($user);
+        // Debe ser docente por defecto, nunca admin
+        $this->assertEquals('docente', $user->role);
+    }
+
+    /**
+     * Las peticiones públicas o no autorizadas a la sincronización de Telegram deben ser rechazadas.
+     */
+    public function test_peticiones_no_autorizadas_a_telegram_son_bloqueadas(): void
+    {
+        // 1. Endpoint público API bloqueado
+        $resApi = $this->getJson('/api/telegram/sync');
+        $resApi->assertStatus(401);
+
+        // 2. Endpoint web requiere autenticación
+        $resWeb = $this->get('/telegram/sync');
+        $resWeb->assertRedirect('/login');
+    }
+
+    /**
+     * La actualización de un alumno no debe perder campos como edad, comentarios y fecha de nacimiento.
+     */
+    public function test_actualizacion_alumno_preserva_todos_los_campos(): void
+    {
+        $admin = User::first() ?? User::factory()->create(['role' => 'admin']);
+
+        $alumno = Alumno::firstOrCreate(
+            ['matricula' => 'ALUM_CAMPOS_01'],
+            [
+                'nombre' => 'ROBERTO',
+                'apellido' => 'GOMEZ',
+                'sexo' => 'M',
+                'activo' => 1,
+            ]
+        );
+
+        $response = $this->actingAs($admin)->put("/alumnos/{$alumno->matricula}", [
+            'nombre' => 'ROBERTO CARLOS',
+            'apellido' => 'GOMEZ BOLAÑOS',
+            'sexo' => 'M',
+            'nivel_educativo' => 'Primaria',
+            'grado' => '3',
+            'grupo' => 'A',
+            'curp' => 'GOMR800101HDFRRN01',
+            'fecha_nacimiento' => '2015-05-20',
+            'edad' => 11,
+            'comentarios' => 'Alumno con excelente progreso.',
+            'discapacidad' => 'Visual leve',
+            'activo' => 1,
+        ]);
+
+        $response->assertStatus(302);
+
+        $alumno->refresh();
+        $this->assertEquals('ROBERTO CARLOS', $alumno->nombre);
+        $this->assertEquals('GOMEZ BOLAÑOS', $alumno->apellido);
+        $this->assertEquals('2015-05-20', $alumno->fecha_nacimiento);
+        $this->assertEquals(11, $alumno->edad);
+        $this->assertEquals('Alumno con excelente progreso.', $alumno->comentarios);
+    }
+}

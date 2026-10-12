@@ -12,16 +12,24 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('alumnos', function (Blueprint $table) {
-            $table->string('foto_perfil')->nullable()->after('curp');
+            if (!Schema::hasColumn('alumnos', 'foto_perfil')) {
+                $table->string('foto_perfil')->nullable()->after('curp');
+            }
         });
 
         Schema::table('personal', function (Blueprint $table) {
-            $table->string('foto_perfil')->nullable()->after('email');
+            if (!Schema::hasColumn('personal', 'foto_perfil')) {
+                $table->string('foto_perfil')->nullable();
+            }
         });
 
         Schema::table('tutores', function (Blueprint $table) {
-            $table->string('t1_foto_perfil')->nullable()->after('t1_email');
-            $table->string('t2_foto_perfil')->nullable()->after('t2_telefono');
+            if (!Schema::hasColumn('tutores', 't1_foto_perfil')) {
+                $table->string('t1_foto_perfil')->nullable();
+            }
+            if (!Schema::hasColumn('tutores', 't2_foto_perfil')) {
+                $table->string('t2_foto_perfil')->nullable();
+            }
         });
     }
 

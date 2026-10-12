@@ -144,23 +144,25 @@
 
   /* ─── KPI Cards ─── */
   .kpi-card {
-    @apply premium-card p-6 flex justify-between items-center cursor-default;
+    @apply premium-card p-5 sm:p-6 flex items-center justify-between cursor-default rounded-3xl transition-all duration-300;
     position: relative;
     overflow: hidden;
   }
 
-  .kpi-card .kpi-icon {
-    @apply w-12 h-12 rounded-2xl flex items-center justify-center;
-    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+  .kpi-card .kpi-icon,
+  .kpi-card .kpi-icon-container {
+    @apply w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, border-color 0.2s ease;
   }
 
-  .kpi-card:hover .kpi-icon {
-    transform: scale(1.08);
+  .kpi-card:hover .kpi-icon,
+  .kpi-card:hover .kpi-icon-container {
+    transform: scale(1.06);
   }
 
   .kpi-card .kpi-number {
-    @apply font-display text-4xl font-black mt-1 tracking-tight;
-    letter-spacing: -0.03em;
+    @apply font-display text-3xl sm:text-4xl lg:text-[42px] font-black tracking-tight leading-none my-1.5;
+    letter-spacing: -0.035em;
   }
 
   /* ─── Buttons (Apple Primary, Secondary & Ghost) ─── */

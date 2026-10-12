@@ -29,111 +29,123 @@ class HistorialController extends Controller
     /**
      * Base query usando el esquema polimórfico (asistible_type / asistible_id).
      */
-    private function getBaseQuery(string $fecha, string $busqueda, string $rol)
-    {
-        // Unimos las tres tablas de personas con LEFT JOIN condicional
-        $query = DB::table('registros_asistencia as r')
-            ->leftJoin('alumnos as a', function ($join) {
-                $join->on('r.asistible_id', '=', 'a.matricula')
-                     ->where('r.asistible_type', '=', \App\Models\Alumno::class);
-            })
-            ->leftJoin('personal as p', function ($join) {
-                $join->on('r.asistible_id', '=', 'p.id')
-                     ->where('r.asistible_type', '=', \App\Models\Personal::class);
-            })
-            ->leftJoin('tutores as t', function ($join) {
-                $join->on('r.asistible_id', '=', 't.t1_telefono')
-                     ->where('r.asistible_type', '=', \App\Models\Tutor::class);
-            })
-            ->whereDate('r.fecha', $fecha)
-            ->whereNull('t.deleted_at'); // Ignorar tutores en soft-delete
+     private function getBaseQuery(string $fecha, string $busqueda, string $rol)
+     {
+         // Unimos las tres tablas de personas según asistible_type
+         $query = DB::table('registros_asistencia as r')
+             ->leftJoin('alumnos as a', function ($join) {
+                 $join->on('r.asistible_id', '=', 'a.matricula')
+                      ->where('r.asistible_type', '=', \App\Models\Alumno::class);
+             })
+             ->leftJoin('personal as p', function ($join) {
+                 $join->on('r.asistible_id', '=', DB::raw('CAST(p.id AS CHAR)'))
+                      ->where('r.asistible_type', '=', \App\Models\Personal::class);
+             })
+             ->leftJoin('tutores as t', function ($join) {
+                 $join->on('r.asistible_id', '=', DB::raw('CAST(t.id AS CHAR)'))
+                      ->where('r.asistible_type', '=', \App\Models\Tutor::class);
+             })
+             ->whereDate('r.fecha', $fecha);
 
-        // Filtro de rol (mapea label → FQCN)
-        if ($rol && $rol !== 'Todos' && isset(self::ROL_TO_TYPE[$rol])) {
-            $query->where('r.asistible_type', self::ROL_TO_TYPE[$rol]);
-        }
+         // Filtro de rol
+         if ($rol && $rol !== 'Todos' && isset(self::ROL_TO_TYPE[$rol])) {
+             $query->where('r.asistible_type', self::ROL_TO_TYPE[$rol]);
+         }
 
-        // Búsqueda por nombre o ID
-        if (!empty($busqueda)) {
-            $query->where(function ($q) use ($busqueda) {
-                $q->where('r.asistible_id',     'LIKE', "%{$busqueda}%")
-                  ->orWhere('a.nombre',          'LIKE', "%{$busqueda}%")
-                  ->orWhere('a.apellido',        'LIKE', "%{$busqueda}%")
-                  ->orWhere('p.nombre_completo', 'LIKE', "%{$busqueda}%")
-                  ->orWhere('t.t1_nombre',       'LIKE', "%{$busqueda}%")
-                  ->orWhere('t.t1_apellido',     'LIKE', "%{$busqueda}%");
-            });
-        }
+         // Búsqueda por nombre o ID
+         if (!empty($busqueda)) {
+             $query->where(function ($q) use ($busqueda) {
+                 $q->where('r.asistible_id',     'LIKE', "%{$busqueda}%")
+                   ->orWhere('a.nombre',          'LIKE', "%{$busqueda}%")
+                   ->orWhere('a.apellido',        'LIKE', "%{$busqueda}%")
+                   ->orWhere('p.nombre_completo', 'LIKE', "%{$busqueda}%")
+                   ->orWhere('t.t1_nombre',       'LIKE', "%{$busqueda}%");
+             });
+         }
 
-        return $query;
-    }
+         return $query;
+     }
 
-    /**
-     * Convierte asistible_type FQCN → etiqueta legible ('Alumno', 'Tutor', 'Personal').
-     */
-    private function tipoARol(string $type): string
-    {
-        return self::TYPE_TO_ROL[$type] ?? 'Desconocido';
-    }
+     /**
+      * Convierte asistible_type FQCN → etiqueta legible ('Alumno', 'Tutor', 'Personal').
+      */
+     private function tipoARol(string $type): string
+     {
+         return self::TYPE_TO_ROL[$type] ?? 'Desconocido';
+     }
 
-    /**
-     * Muestra el historial de asistencias (Pase de Lista) de un día específico.
-     */
-    public function index(Request $request)
-    {
-        $fecha    = $request->query('fecha',    Carbon::today()->toDateString());
-        $busqueda = $request->query('busqueda', '');
-        $rol      = $request->query('rol',      'Todos');
+     /**
+      * Retorna la expresión SQL para el nombre completo.
+      */
+     private function getNombreCompletoSql(): string
+     {
+         $driver = DB::connection()->getDriverName();
 
-        // ── Totales reales del día (sin búsqueda) ──────────────────
-        $totalesRaw = RegistroAsistencia::whereDate('fecha', $fecha)
-            ->select('asistible_type', DB::raw('COUNT(*) as total'))
-            ->groupBy('asistible_type')
-            ->get();
+         if ($driver === 'sqlite') {
+             $alumnoName = "NULLIF(TRIM(COALESCE(a.nombre, '') || ' ' || COALESCE(a.apellido, '')), '')";
+         } else {
+             $alumnoName = "NULLIF(TRIM(CONCAT(COALESCE(a.nombre, ''), ' ', COALESCE(a.apellido, ''))), '')";
+         }
 
-        $estadisticas = ['total' => 0, 'Alumno' => 0, 'Personal' => 0, 'Tutor' => 0];
+         return "COALESCE({$alumnoName}, p.nombre_completo, t.t1_nombre, r.asistible_id) as nombre_completo";
+     }
 
-        foreach ($totalesRaw as $row) {
-            $label = $this->tipoARol($row->asistible_type);
-            $estadisticas[$label] = (int) $row->total;
-            $estadisticas['total'] += $row->total;
-        }
+     /**
+      * Muestra el historial de asistencias (Pase de Lista) de un día específico.
+      */
+     public function index(Request $request)
+     {
+         $fecha    = $request->query('fecha',    Carbon::today()->toDateString());
+         $busqueda = $request->query('busqueda', '');
+         $rol      = $request->query('rol',      'Todos');
 
-        // ── Registros paginados ────────────────────────────────────
-        $query = $this->getBaseQuery($fecha, $busqueda, $rol);
+         // ── Totales reales del día ──────────────────
+         $totalesRaw = DB::table('registros_asistencia')
+             ->whereDate('fecha', $fecha)
+             ->select('asistible_type', DB::raw('COUNT(*) as total'))
+             ->groupBy('asistible_type')
+             ->get();
 
-        $registros = $query->select(
-                'r.id',
-                'r.asistible_id as id_persona',
-                'r.asistible_type',
-                'r.fecha',
-                'r.hora',
-                DB::raw("COALESCE(
-                    a.nombre || ' ' || COALESCE(a.apellido, ''),
-                    p.nombre_completo,
-                    t.t1_nombre || ' ' || COALESCE(t.t1_apellido, ''),
-                    r.asistible_id
-                ) as nombre_completo")
-            )
-            ->orderBy('r.hora', 'desc')
-            ->paginate(50)
-            ->withQueryString()
-            ->through(function ($registro) {
-                $registro->hora_formateada = Carbon::parse($registro->hora)->format('h:i A');
-                $registro->nombre_completo = trim($registro->nombre_completo);
-                // Convertir FQCN → label legible para el frontend
-                $registro->rol = $this->tipoARol($registro->asistible_type);
-                return $registro;
-            });
+         $estadisticas = ['total' => 0, 'Alumno' => 0, 'Personal' => 0, 'Tutor' => 0];
 
-        return Inertia::render('Asistencia/Historial', [
-            'registros'      => $registros,
-            'fechaFiltro'    => $fecha,
-            'busquedaActual' => $busqueda,
-            'rolActual'      => $rol,
-            'estadisticas'   => $estadisticas,
-        ]);
-    }
+         foreach ($totalesRaw as $row) {
+             $label = $this->tipoARol($row->asistible_type ?? '');
+             $count = (int) $row->total;
+             if (isset($estadisticas[$label])) {
+                 $estadisticas[$label] += $count;
+             }
+             $estadisticas['total'] += $count;
+         }
+
+         // ── Registros paginados ────────────────────────────────────
+         $query = $this->getBaseQuery($fecha, $busqueda, $rol);
+
+         $registros = $query->select(
+                 'r.id',
+                 'r.asistible_id as id_persona',
+                 'r.asistible_type',
+                 'r.fecha',
+                 'r.hora',
+                 DB::raw($this->getNombreCompletoSql())
+             )
+             ->orderBy('r.hora', 'desc')
+             ->paginate(50)
+             ->withQueryString()
+             ->through(function ($registro) {
+                 $registro->hora_formateada = Carbon::parse($registro->hora)->format('h:i A');
+                 $registro->nombre_completo = trim($registro->nombre_completo);
+                 $registro->rol = $this->tipoARol($registro->asistible_type ?? '');
+                 return $registro;
+             });
+
+         return Inertia::render('Asistencia/Historial', [
+             'registros'      => $registros,
+             'fechaFiltro'    => $fecha,
+             'busquedaActual' => $busqueda,
+             'rolActual'      => $rol,
+             'estadisticas'   => $estadisticas,
+         ]);
+     }
 
     /**
      * Exporta el reporte de asistencias a CSV (Stream).
@@ -166,12 +178,7 @@ class HistorialController extends Controller
                 'r.hora',
                 'r.asistible_id',
                 'r.asistible_type',
-                DB::raw("COALESCE(
-                    a.nombre || ' ' || COALESCE(a.apellido, ''),
-                    p.nombre_completo,
-                    t.t1_nombre || ' ' || COALESCE(t.t1_apellido, ''),
-                    r.asistible_id
-                ) as nombre_completo")
+                DB::raw($this->getNombreCompletoSql())
             )
             ->orderBy('r.hora', 'desc')
             ->chunk(500, function ($registros) use ($file) {

@@ -57,6 +57,7 @@ class AlumnoController extends Controller
         $request->validate([
             'nombre' => 'required|string|max:100',
             'apellido' => 'required|string|max:100',
+            'sexo' => 'nullable|string|in:M,F',
             'nivel_educativo' => 'nullable|string|max:50',
             'grado' => 'nullable|string|max:20',
             'grupo' => 'nullable|string|max:10',
@@ -66,13 +67,14 @@ class AlumnoController extends Controller
             'comentarios' => 'nullable|string|max:1000',
             'discapacidad' => 'nullable|string|max:100',
             'foto_perfil' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'activo' => 'nullable|boolean',
         ]);
 
         $alumno = Alumno::where('matricula', $matricula)->firstOrFail();
         
         $data = [
-            'nombre' => $request->nombre,
-            'apellido' => $request->apellido,
+            'nombre' => strtoupper($request->nombre),
+            'apellido' => strtoupper($request->apellido),
             'nivel_educativo' => $request->nivel_educativo,
             'grado' => $request->grado,
             'grupo' => $request->grupo,
@@ -82,6 +84,14 @@ class AlumnoController extends Controller
             'comentarios' => $request->comentarios,
             'discapacidad' => $request->discapacidad,
         ];
+
+        if ($request->has('sexo')) {
+            $data['sexo'] = $request->sexo;
+        }
+
+        if ($request->has('activo')) {
+            $data['activo'] = (bool)$request->activo;
+        }
 
         if ($request->hasFile('foto_perfil')) {
             if ($alumno->foto_perfil && Storage::disk('public')->exists($alumno->foto_perfil)) {

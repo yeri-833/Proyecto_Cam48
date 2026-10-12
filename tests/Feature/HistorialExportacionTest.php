@@ -14,10 +14,7 @@ class HistorialExportacionTest extends TestCase
      */
     public function test_exportacion_historial_descarga_csv(): void
     {
-        $user = User::first(); // Usamos el admin principal
-        if (!$user) {
-            $this->markTestSkipped('No hay usuarios en la base de datos para probar.');
-        }
+        $user = User::first() ?? User::factory()->create();
 
         $response = $this->actingAs($user)->get('/historial/exportar?fecha=' . date('Y-m-d'));
 

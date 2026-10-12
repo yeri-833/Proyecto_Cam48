@@ -20,11 +20,20 @@ return new class extends Migration
                 $table->dropIndex('idx_asistencia_persona_fecha');
             }
 
-            // Crear nuevo índice enfocado en las consultas de fecha (Historial/Reportes)
-            // Nota: la columna 'rol' fue eliminada en la migración polimórfica.
-            // El índice ahora cubre (fecha, asistible_type) para los filtros del Historial.
-            if (!in_array('idx_fecha_type', $indexNames)) {
-                $table->index(['fecha', 'asistible_type'], 'idx_fecha_type');
+            // Si la columna asistible_type ya existe, indexar (fecha, asistible_type).
+            // Si la columna rol existe (orden cronológico previo a la polimórfica), indexar (fecha, rol).
+            if (Schema::hasColumn('registros_asistencia', 'asistible_type')) {
+                if (!in_array('idx_fecha_type', $indexNames)) {
+                    $table->index(['fecha', 'asistible_type'], 'idx_fecha_type');
+                }
+            } elseif (Schema::hasColumn('registros_asistencia', 'rol')) {
+                if (!in_array('idx_asistencia_fecha_rol', $indexNames)) {
+                    $table->index(['fecha', 'rol'], 'idx_asistencia_fecha_rol');
+                }
+            } else {
+                if (!in_array('idx_asistencia_fecha', $indexNames)) {
+                    $table->index('fecha', 'idx_asistencia_fecha');
+                }
             }
         });
     }

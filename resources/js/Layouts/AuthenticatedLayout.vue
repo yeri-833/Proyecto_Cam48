@@ -28,7 +28,7 @@ let syncInterval = null;
 
 const checkTelegramSync = async () => {
     try {
-        const response = await axios.get('/api/telegram/sync');
+        const response = await axios.get('/telegram/sync');
         if (response.data.status === 'ok' && response.data.vinculados && response.data.vinculados.length > 0) {
             response.data.vinculados.forEach(nombre => {
                 Swal.fire({
@@ -102,7 +102,7 @@ const confirmarSalida = () => {
 </script>
 
 <template>
-    <div class="bg-slate-50 dark:bg-[#0b0f19] text-slate-800 dark:text-slate-100 font-sans flex min-h-screen overflow-hidden transition-colors duration-300 relative" @keydown.escape="menuOpen = false">
+    <div class="bg-slate-50 dark:bg-[#0b0f19] text-slate-800 dark:text-slate-100 font-sans flex h-screen transition-colors duration-300 relative" @keydown.escape="menuOpen = false">
         
         <!-- Subtle Ambient Background Light (Calm & Elegant, no jarring blobs) -->
         <div class="fixed inset-0 pointer-events-none overflow-hidden z-0">
@@ -127,13 +127,9 @@ const confirmarSalida = () => {
             ></div>
         </Transition>
 
-        <!-- Sidebar (macOS Style Vibrancy) -->
+        <!-- ═══ SIDEBAR DESKTOP (md+) — Sticky, siempre visible ═══ -->
         <aside 
-            :class="[
-                menuOpen ? 'translate-x-0' : '-translate-x-full',
-                'md:translate-x-0'
-            ]" 
-            class="sidebar-shell w-64 lg:w-72 text-white fixed md:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col shrink-0"
+            class="sidebar-shell hidden md:flex w-64 lg:w-72 text-white sticky top-0 h-screen z-30 flex-col shrink-0 self-start"
             aria-label="Navegación principal"
         >
             <!-- Header Branding -->
@@ -283,8 +279,88 @@ const confirmarSalida = () => {
             </div>
         </aside>
 
+        <!-- ═══ SIDEBAR MOBILE — Fixed overlay drawer ═══ -->
+        <Transition
+            enter-active-class="transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            enter-from-class="-translate-x-full"
+            enter-to-class="translate-x-0"
+            leave-active-class="transition-transform duration-200 ease-in"
+            leave-from-class="translate-x-0"
+            leave-to-class="-translate-x-full"
+        >
+            <aside 
+                v-show="menuOpen"
+                class="sidebar-shell md:hidden w-72 text-white fixed top-0 left-0 h-screen z-50 flex flex-col"
+                aria-label="Menú de navegación móvil"
+            >
+                <div class="px-3 py-4 border-b border-white/[0.08] flex items-center justify-between">
+                    <Link :href="route('dashboard')" class="flex items-center" @click="menuOpen = false">
+                        <ApplicationLogo variant="horizontal" force-theme="dark" size="h-12" alt="CAM Tonalpouhqui #48" class="w-auto" />
+                    </Link>
+                    <button @click="menuOpen = false" class="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center text-sm transition-all">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <nav class="flex-1 min-h-0 px-3 py-3 space-y-0.5 text-[13px] font-medium custom-scroll overflow-y-auto">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-1 pb-2">Principal</p>
+                    <Link :href="route('dashboard')" :class="route().current('dashboard') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                        <div class="w-6 text-center text-sm" :class="route().current('dashboard') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-th-large"></i></div>
+                        <span>Dashboard</span>
+                    </Link>
+                    <Link href="/personal" :class="$page.url.startsWith('/personal') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                        <div class="w-6 text-center text-sm" :class="$page.url.startsWith('/personal') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-chalkboard-teacher"></i></div>
+                        <span>Personal</span>
+                    </Link>
+                    <Link :href="route('tutores.index')" :class="route().current('tutores.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                        <div class="w-6 text-center text-sm" :class="route().current('tutores.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-users"></i></div>
+                        <span>Tutores</span>
+                    </Link>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-3 pb-2">Operación</p>
+                    <Link :href="route('historial.index')" :class="route().current('historial.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                        <div class="w-6 text-center text-sm" :class="route().current('historial.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-history"></i></div>
+                        <span>Historial</span>
+                    </Link>
+                    <Link :href="route('expedientes.index')" :class="route().current('expedientes.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                        <div class="w-6 text-center text-sm" :class="route().current('expedientes.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-folder-open"></i></div>
+                        <span>Expedientes</span>
+                    </Link>
+                    <Link :href="route('asistencia.escaner')" :class="route().current('asistencia.escaner') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                        <div class="w-6 text-center text-sm" :class="route().current('asistencia.escaner') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-qrcode"></i></div>
+                        <span>Pase de Lista</span>
+                    </Link>
+                    <Link :href="route('credenciales.index')" :class="route().current('credenciales.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                        <div class="w-6 text-center text-sm" :class="route().current('credenciales.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-id-card"></i></div>
+                        <span>Credenciales</span>
+                    </Link>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-3 pb-2">Análisis</p>
+                    <Link :href="route('estadisticas.index')" :class="route().current('estadisticas.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                        <div class="w-6 text-center text-sm" :class="route().current('estadisticas.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-chart-pie"></i></div>
+                        <span>Estadísticas</span>
+                    </Link>
+                    <Link :href="route('eventos.index')" :class="route().current('eventos.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                        <div class="w-6 text-center text-sm" :class="route().current('eventos.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-calendar-alt"></i></div>
+                        <span>Agenda</span>
+                    </Link>
+                </nav>
+                <div class="p-3 border-t border-white/[0.08]">
+                    <Link :href="route('profile.edit')" class="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] transition-colors mb-1 group" @click="menuOpen = false">
+                        <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center font-display font-black text-xs text-white shadow-sm shrink-0">
+                            {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-xs font-bold text-slate-200 truncate">{{ user.name }}</p>
+                            <p class="text-[10px] text-slate-400 truncate">{{ user.email }}</p>
+                        </div>
+                    </Link>
+                    <button @click="confirmarSalida" class="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-2 rounded-xl transition-all font-semibold text-xs">
+                        <i class="fas fa-power-off text-xs"></i> Cerrar Sesión
+                    </button>
+                </div>
+            </aside>
+        </Transition>
+
         <!-- Main Content Area -->
-        <main class="flex-1 h-screen overflow-y-auto custom-scroll relative z-10 flex flex-col">
+        <main class="flex-1 min-w-0 h-screen overflow-y-auto custom-scroll relative z-10 flex flex-col">
             
             <!-- Top Navigation Bar (Translucent Glass Layer - Apple Principle §12) -->
             <nav class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border-b border-slate-200/70 dark:border-white/[0.08] py-3.5 px-6 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-colors duration-300 shrink-0">

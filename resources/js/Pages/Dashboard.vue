@@ -212,42 +212,77 @@ const guardarEdicion = () => {
                 </div>
             </div>
 
-            <!-- KPI Indicator Cards (Apple Cards with Subtle Depth) -->
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
+            <!-- KPI Indicator Cards (Apple Cards with Subtle Depth & Real Hierarchy) -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
 
                 <!-- Alumnos Activos -->
-                <div class="premium-card p-5 sm:p-6 flex items-center justify-between">
-                    <div>
-                        <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Alumnos Activos</p>
-                        <h3 class="kpi-number text-slate-900 dark:text-white">{{ stats.totalAlumnos }}</h3>
-                        <span class="text-xs font-semibold text-sky-600 dark:text-sky-400 mt-1 inline-block">Matrícula escolar</span>
+                <div class="kpi-card group">
+                    <div class="flex-1 min-w-0 pr-3">
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-wide uppercase">
+                            Alumnos Activos
+                        </p>
+                        <h3 class="kpi-number text-sky-600 dark:text-sky-400">
+                            {{ stats.totalAlumnos }}
+                        </h3>
+                        <div class="flex items-center gap-1.5 mt-2">
+                            <span class="inline-block w-2 h-2 rounded-full bg-sky-500"></span>
+                            <span class="text-xs font-semibold text-sky-700 dark:text-sky-300">
+                                Matrícula escolar
+                            </span>
+                        </div>
                     </div>
-                    <div class="kpi-icon bg-sky-500/10 text-sky-600 dark:text-sky-400">
-                        <i class="fas fa-user-graduate text-xl"></i>
+                    <div class="kpi-icon bg-sky-50 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-sky-500/25 shadow-sm group-hover:bg-sky-100 dark:group-hover:bg-sky-500/20">
+                        <svg class="w-6 h-6 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 14v7" />
+                        </svg>
                     </div>
                 </div>
 
                 <!-- Asistencias Hoy -->
-                <div class="premium-card p-5 sm:p-6 flex items-center justify-between">
-                    <div>
-                        <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Asistencias Hoy</p>
-                        <h3 class="kpi-number text-emerald-600 dark:text-emerald-400">{{ stats.asistenciasHoy }}</h3>
-                        <span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1 inline-block">Registros escaneados</span>
+                <div class="kpi-card group">
+                    <div class="flex-1 min-w-0 pr-3">
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-wide uppercase">
+                            Asistencias Hoy
+                        </p>
+                        <h3 class="kpi-number text-emerald-600 dark:text-emerald-400">
+                            {{ stats.asistenciasHoy }}
+                        </h3>
+                        <div class="flex items-center gap-1.5 mt-2">
+                            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <span class="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                                Registros escaneados
+                            </span>
+                        </div>
                     </div>
-                    <div class="kpi-icon bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                        <i class="fas fa-qrcode text-xl"></i>
+                    <div class="kpi-icon bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/25 shadow-sm group-hover:bg-emerald-100 dark:group-hover:bg-emerald-500/20">
+                        <svg class="w-6 h-6 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                        </svg>
                     </div>
                 </div>
 
                 <!-- Pendientes del Día -->
-                <div class="premium-card p-5 sm:p-6 flex items-center justify-between">
-                    <div>
-                        <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Pendientes Hoy</p>
-                        <h3 class="kpi-number text-amber-600 dark:text-amber-400">{{ stats.pendientes }}</h3>
-                        <span class="text-xs font-semibold text-amber-600 dark:text-amber-400 mt-1 inline-block">Sin escaneo registrado</span>
+                <div class="kpi-card group">
+                    <div class="flex-1 min-w-0 pr-3">
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-wide uppercase">
+                            Pendientes Hoy
+                        </p>
+                        <h3 class="kpi-number text-amber-600 dark:text-amber-400">
+                            {{ stats.pendientes }}
+                        </h3>
+                        <div class="flex items-center gap-1.5 mt-2">
+                            <span class="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
+                            <span class="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                Sin escaneo registrado
+                            </span>
+                        </div>
                     </div>
-                    <div class="kpi-icon bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                        <i class="far fa-clock text-xl"></i>
+                    <div class="kpi-icon bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-500/25 shadow-sm group-hover:bg-amber-100 dark:group-hover:bg-amber-500/20">
+                        <svg class="w-6 h-6 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                     </div>
                 </div>
             </div>

@@ -20,10 +20,7 @@ class NotificacionEventosTest extends TestCase
         // Engañamos al sistema para que no envíe nada de verdad y solo capture los Jobs
         Queue::fake();
 
-        $user = User::first(); 
-        if (!$user) {
-            $this->markTestSkipped('No hay usuarios para probar.');
-        }
+        $user = User::first() ?? User::factory()->create();
 
         // Ejecutar petición para crear un evento
         $response = $this->actingAs($user)->postJson('/eventos', [

@@ -3,16 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tutor extends Model
 {
-    use SoftDeletes;
     protected $table = 'tutores';
-    public $timestamps = true;
+    public $timestamps = false;
 
     protected $fillable = [
-        'matricula_alumno', 't1_nombre', 't1_apellido', 't1_telefono', 't1_email', 't1_telegram_chat_id', 't1_foto_perfil', 't2_foto_perfil'
+        'matricula_alumno',
+        't1_nombre',
+        't1_parentesco',
+        't1_telefono',
+        't1_direccion',
+        't1_profesion',
+        't2_nombre',
+        't2_parentesco',
+        't2_telefono',
     ];
 
     public function alumno()
@@ -20,8 +26,15 @@ class Tutor extends Model
         return $this->belongsTo(Alumno::class, 'matricula_alumno', 'matricula');
     }
 
+    // Asistencias polimórficas (asistible_type, asistible_id)
     public function asistencias()
     {
         return $this->morphMany(RegistroAsistencia::class, 'asistible');
     }
+
+    public function getNombreCompletoAttribute(): string
+    {
+        return strtoupper(trim($this->t1_nombre ?? ''));
+    }
 }
+

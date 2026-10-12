@@ -7,10 +7,16 @@ use Illuminate\Database\Eloquent\Model;
 class RegistroAsistencia extends Model
 {
     protected $table = 'registros_asistencia';
-    public $timestamps = true;
+    public $timestamps = false;
 
     protected $fillable = [
-        'asistible_type', 'asistible_id', 'fecha', 'hora'
+        'asistible_type',
+        'asistible_id',
+        'id_persona',
+        'rol',
+        'fecha',
+        'hora',
+        'modo_registro',
     ];
 
     protected $casts = [
@@ -22,3 +28,4 @@ class RegistroAsistencia extends Model
         return $this->morphTo();
     }
 }
+
