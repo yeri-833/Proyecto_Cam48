@@ -26,15 +26,13 @@ watch(
         if (props.show) {
             document.body.style.overflow = 'hidden';
             showSlot.value = true;
-
             dialog.value?.showModal();
         } else {
             document.body.style.overflow = '';
-
             setTimeout(() => {
                 dialog.value?.close();
                 showSlot.value = false;
-            }, 200);
+            }, 250);
         }
     },
 );
@@ -48,7 +46,6 @@ const close = () => {
 const closeOnEscape = (e) => {
     if (e.key === 'Escape') {
         e.preventDefault();
-
         if (props.show) {
             close();
         }
@@ -59,7 +56,6 @@ onMounted(() => document.addEventListener('keydown', closeOnEscape));
 
 onUnmounted(() => {
     document.removeEventListener('keydown', closeOnEscape);
-
     document.body.style.overflow = '';
 });
 
@@ -70,7 +66,9 @@ const maxWidthClass = computed(() => {
         lg: 'sm:max-w-lg',
         xl: 'sm:max-w-xl',
         '2xl': 'sm:max-w-2xl',
-    }[props.maxWidth];
+        '3xl': 'sm:max-w-3xl',
+        '4xl': 'sm:max-w-4xl',
+    }[props.maxWidth] || 'sm:max-w-2xl';
 });
 </script>
 
@@ -80,9 +78,10 @@ const maxWidthClass = computed(() => {
         ref="dialog"
     >
         <div
-            class="fixed inset-0 z-50 overflow-y-auto px-4 py-6 sm:px-0"
+            class="fixed inset-0 z-50 overflow-y-auto px-4 py-6 sm:px-0 flex items-center justify-center"
             scroll-region
         >
+            <!-- Backdrop -->
             <Transition
                 enter-active-class="ease-out duration-300"
                 enter-from-class="opacity-0"
@@ -96,23 +95,22 @@ const maxWidthClass = computed(() => {
                     class="fixed inset-0 transform transition-all"
                     @click="close"
                 >
-                    <div
-                        class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-                    />
+                    <div class="absolute inset-0 bg-slate-950/65 backdrop-blur-md" />
                 </div>
             </Transition>
 
+            <!-- Dialog Content with Apple spring curve -->
             <Transition
-                enter-active-class="ease-out duration-300"
-                enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                enter-to-class="opacity-100 translate-y-0 sm:scale-100"
-                leave-active-class="ease-in duration-200"
-                leave-from-class="opacity-100 translate-y-0 sm:scale-100"
-                leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                enter-from-class="opacity-0 scale-95 translate-y-3"
+                enter-to-class="opacity-100 scale-100 translate-y-0"
+                leave-active-class="transition-all duration-200 ease-in"
+                leave-from-class="opacity-100 scale-100 translate-y-0"
+                leave-to-class="opacity-0 scale-95 translate-y-2"
             >
                 <div
                     v-show="show"
-                    class="mb-6 transform overflow-hidden rounded-[2rem] bg-white dark:bg-slate-800 shadow-2xl transition-all sm:mx-auto sm:w-full"
+                    class="transform overflow-hidden rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-white/60 dark:border-white/10 sm:w-full relative z-10 my-8 max-h-[90vh] overflow-y-auto custom-scroll"
                     :class="maxWidthClass"
                 >
                     <slot v-if="showSlot" />

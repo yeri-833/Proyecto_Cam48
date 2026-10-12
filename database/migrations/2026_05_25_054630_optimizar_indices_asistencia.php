@@ -21,8 +21,10 @@ return new class extends Migration
             }
 
             // Crear nuevo índice enfocado en las consultas de fecha (Historial/Reportes)
-            if (!in_array('idx_fecha_rol', $indexNames)) {
-                $table->index(['fecha', 'rol'], 'idx_fecha_rol');
+            // Nota: la columna 'rol' fue eliminada en la migración polimórfica.
+            // El índice ahora cubre (fecha, asistible_type) para los filtros del Historial.
+            if (!in_array('idx_fecha_type', $indexNames)) {
+                $table->index(['fecha', 'asistible_type'], 'idx_fecha_type');
             }
         });
     }
@@ -37,11 +39,8 @@ return new class extends Migration
 
         Schema::table('registros_asistencia', function (Blueprint $table) use ($indexNames) {
             // Revertir los cambios
-            if (in_array('idx_fecha_rol', $indexNames)) {
-                $table->dropIndex('idx_fecha_rol');
-            }
-            if (!in_array('idx_asistencia_persona_fecha', $indexNames)) {
-                $table->index(['id_persona', 'fecha'], 'idx_asistencia_persona_fecha');
+            if (in_array('idx_fecha_type', $indexNames)) {
+                $table->dropIndex('idx_fecha_type');
             }
         });
     }

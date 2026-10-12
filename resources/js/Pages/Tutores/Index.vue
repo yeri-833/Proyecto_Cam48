@@ -6,9 +6,18 @@ import Swal from "sweetalert2";
 import Pagination from "@/Components/Pagination.vue";
 
 const props = defineProps({
-    tutores: Object,
-    alumnos: Array,
-    filtros: Object,
+    tutores: {
+        type: Object,
+        default: () => ({ data: [], links: [] }),
+    },
+    alumnos: {
+        type: Array,
+        default: () => [],
+    },
+    filtros: {
+        type: Object,
+        default: () => ({ busqueda: '' }),
+    },
 });
 
 const busqueda = ref(props.filtros.busqueda || "");
@@ -70,6 +79,7 @@ const enviarMensaje = () => {
                 position: "top-end",
                 showConfirmButton: false,
                 timer: 3000,
+                customClass: { popup: "rounded-2xl" },
             });
         },
     });
@@ -78,17 +88,17 @@ const enviarMensaje = () => {
 const enviarInvitacion = (tutor) => {
     Swal.fire({
         title: "¿Enviar Invitación?",
-        text: `Se enviará un correo a ${tutor.t1_email || "..."} con el link mágico de Telegram.`,
+        text: `Se enviará un correo a ${tutor.t1_email || "..."} con el enlace para vincular Telegram.`,
         icon: "question",
         showCancelButton: true,
-        confirmButtonColor: "#0ea5e9",
+        confirmButtonColor: "#009FE3",
         cancelButtonColor: "#64748b",
-        confirmButtonText: "Sí, enviar correo",
+        confirmButtonText: "Sí, enviar invitación",
         cancelButtonText: "Cancelar",
         customClass: {
-            popup: "rounded-3xl",
-            confirmButton: "rounded-xl font-bold px-6 py-3",
-            cancelButton: "rounded-xl font-bold px-6 py-3",
+            popup: "swal2-popup",
+            confirmButton: "btn-premium",
+            cancelButton: "btn-ghost",
         },
     }).then((result) => {
         if (result.isConfirmed) {
@@ -99,13 +109,14 @@ const enviarInvitacion = (tutor) => {
                     preserveScroll: true,
                     onSuccess: () => {
                         Swal.fire({
-                            title: "¡Enviado!",
-                            text: "El correo electrónico ha sido despachado.",
+                            title: "¡Invitación Despachada!",
+                            text: "El correo electrónico ha sido enviado al tutor.",
                             icon: "success",
                             toast: true,
                             position: "top-end",
                             showConfirmButton: false,
                             timer: 3000,
+                            customClass: { popup: "rounded-2xl" },
                         });
                     },
                 },
@@ -141,6 +152,7 @@ const guardarTutor = () => {
                 position: "top-end",
                 showConfirmButton: false,
                 timer: 3000,
+                customClass: { popup: "rounded-2xl" },
             });
         },
     });
@@ -148,8 +160,8 @@ const guardarTutor = () => {
 
 const eliminarTutor = (id) => {
     Swal.fire({
-        title: "¿Eliminar registro?",
-        text: "El alumno se quedará sin tutor asignado.",
+        title: "¿Eliminar tutor asignado?",
+        text: "El alumno quedará temporalmente sin tutor registrado.",
         icon: "warning",
         showCancelButton: true,
         confirmButtonColor: "#ef4444",
@@ -157,9 +169,9 @@ const eliminarTutor = (id) => {
         confirmButtonText: "Sí, eliminar",
         cancelButtonText: "Cancelar",
         customClass: {
-            popup: "rounded-3xl",
-            confirmButton: "rounded-xl font-bold px-6 py-3",
-            cancelButton: "rounded-xl font-bold px-6 py-3",
+            popup: "swal2-popup",
+            confirmButton: "bg-rose-600 text-white font-bold px-5 py-2.5 rounded-xl",
+            cancelButton: "btn-ghost",
         },
     }).then((result) => {
         if (result.isConfirmed) {
@@ -170,185 +182,138 @@ const eliminarTutor = (id) => {
 </script>
 
 <template>
-    <Head title="Directorio de Tutores" />
+    <Head title="Directorio de Tutores — FamilyLock" />
 
     <AuthenticatedLayout>
         <Teleport to="#portal-header-title" v-if="$el">
-            <h1
-                class="font-display font-black text-xl text-slate-800 dark:text-white tracking-tight"
-            >
-                Directorio de <span class="text-primary">Tutores</span>
-            </h1>
+            <h1 class="font-display font-black text-lg text-slate-900 dark:text-white">Tutores</h1>
         </Teleport>
 
-        <div class="p-6 md:p-8 max-w-7xl mx-auto animate-fade-in-up">
-            <div class="mb-8 hidden md:flex items-center justify-between">
+        <div class="p-6 md:p-8 max-w-7xl mx-auto">
+            
+            <!-- Page Header -->
+            <div class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1
-                        class="font-display font-black text-3xl text-slate-800 dark:text-white tracking-tight"
-                    >
-                        Directorio de <span class="text-primary">Tutores</span>
+                    <h1 class="font-display font-black text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight">
+                        Directorio de <span class="text-gradient-primary">Tutores</span>
                     </h1>
-                    <p
-                        class="text-slate-500 dark:text-slate-400 font-bold text-sm mt-1"
-                    >
-                        Gestión de padres de familia y contactos de emergencia.
+                    <p class="text-slate-500 dark:text-slate-400 font-medium text-xs sm:text-sm mt-1">
+                        Padres de familia, responsables legales y contactos de emergencia del CAM #48.
                     </p>
                 </div>
 
-                <button @click="abrirModalNuevo" class="btn-premium">
-                    <i class="fas fa-plus"></i> Registrar Tutor
+                <button @click="abrirModalNuevo" class="btn-premium flex items-center gap-2">
+                    <i class="fas fa-plus text-xs"></i> <span>Registrar Tutor</span>
                 </button>
             </div>
 
-            <div
-                class="premium-card-static overflow-hidden animate-fade-in-up"
-                style="animation-delay: 150ms"
-            >
-                <!-- Buscador -->
-                <div
-                    class="p-6 border-b border-slate-100/80 dark:border-slate-700/50 bg-slate-50/30 dark:bg-slate-800/30 flex justify-between items-center"
-                >
-                    <div class="relative w-full md:w-96">
-                        <i
-                            class="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-                        ></i>
+            <!-- Table Card -->
+            <div class="premium-card-static overflow-hidden">
+                <div class="p-5 border-b border-slate-200/70 dark:border-white/[0.08] flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50 dark:bg-slate-900/40">
+                    <div class="relative w-full sm:w-80">
+                        <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                         <input
                             type="text"
                             v-model="busqueda"
                             placeholder="Buscar por nombre o teléfono..."
-                            class="input-premium w-full pl-12 text-sm"
+                            class="input-premium w-full pl-9 pr-4 py-2 text-xs"
                         />
                     </div>
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {{ tutores.data.length }} tutores registrados
+                    </span>
                 </div>
 
-                <!-- Tabla -->
                 <div class="overflow-x-auto">
                     <table class="table-premium">
                         <thead>
                             <tr>
                                 <th>Nombre del Tutor</th>
-                                <th>Teléfono (Contacto)</th>
+                                <th>Contacto / Teléfono</th>
                                 <th>Alumno Vinculado</th>
                                 <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody v-auto-animate>
-                            <tr
-                                v-for="tutor in tutores.data"
-                                :key="tutor.id"
-                                class="group"
-                            >
+                        <tbody>
+                            <tr v-for="tutor in tutores.data" :key="tutor.id" class="group">
                                 <td>
                                     <div class="flex items-center gap-3">
-                                        <div
-                                            v-if="tutor.t1_foto_perfil"
-                                            class="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-sm shrink-0"
-                                        >
+                                        <div class="w-8 h-8 rounded-full overflow-hidden bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-500/20 flex items-center justify-center font-bold text-xs shrink-0">
                                             <img
+                                                v-if="tutor.t1_foto_perfil"
                                                 :src="`/storage/${tutor.t1_foto_perfil}`"
                                                 class="w-full h-full object-cover"
+                                                alt="Foto Tutor"
                                             />
+                                            <span v-else>{{ tutor.t1_nombre?.charAt(0) || 'T' }}</span>
                                         </div>
-                                        <div
-                                            v-else
-                                            class="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-orange-500 font-black shrink-0"
-                                        >
-                                            {{ tutor.t1_nombre.charAt(0) }}
-                                        </div>
-                                        <p
-                                            class="font-bold text-slate-800 dark:text-slate-200 text-sm uppercase"
-                                        >
+                                        <p class="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase leading-tight">
                                             {{ tutor.t1_nombre }}
                                         </p>
                                     </div>
                                 </td>
                                 <td>
-                                    <div
-                                        class="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-bold text-sm"
-                                    >
-                                        <i
-                                            class="fas fa-phone-alt text-slate-400 dark:text-slate-500"
-                                        ></i>
-                                        {{ tutor.t1_telefono }}
-                                    </div>
-                                    <div
-                                        v-if="tutor.t1_email"
-                                        class="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-bold text-xs mt-1"
-                                    >
-                                        <i
-                                            class="fas fa-envelope text-slate-400 dark:text-slate-500"
-                                        ></i>
-                                        {{ tutor.t1_email }}
-                                    </div>
-                                    <div
-                                        v-if="tutor.t1_telegram_chat_id"
-                                        class="flex items-center gap-2 text-sky-500 font-bold text-xs mt-1"
-                                    >
-                                        <i
-                                            class="fab fa-telegram-plane text-sky-400"
-                                        ></i>
-                                        {{ tutor.t1_telegram_chat_id }}
+                                    <div class="text-xs space-y-0.5">
+                                        <div class="flex items-center gap-1.5 font-mono text-slate-700 dark:text-slate-300 font-semibold">
+                                            <i class="fas fa-phone-alt text-[10px] text-slate-400"></i>
+                                            <span>{{ tutor.t1_telefono }}</span>
+                                        </div>
+                                        <div v-if="tutor.t1_email" class="flex items-center gap-1.5 text-slate-400 text-[11px]">
+                                            <i class="fas fa-envelope text-[10px]"></i>
+                                            <span class="truncate max-w-[160px]">{{ tutor.t1_email }}</span>
+                                        </div>
+                                        <div v-if="tutor.t1_telegram_chat_id" class="inline-flex items-center gap-1.5 text-sky-500 font-semibold text-[11px]">
+                                            <i class="fab fa-telegram-plane"></i>
+                                            <span>Telegram Activo</span>
+                                        </div>
                                     </div>
                                 </td>
                                 <td>
                                     <div v-if="tutor.alumno">
-                                        <p
-                                            class="font-bold text-primary text-sm uppercase"
-                                        >
-                                            {{ tutor.alumno.nombre }}
-                                            {{ tutor.alumno.apellido }}
+                                        <p class="font-bold text-sky-600 dark:text-sky-400 text-xs uppercase leading-tight">
+                                            {{ tutor.alumno.nombre }} {{ tutor.alumno.apellido }}
                                         </p>
-                                        <p
-                                            class="text-[10px] font-mono text-slate-500 font-bold mt-0.5"
-                                        >
+                                        <p class="text-[10px] font-mono text-slate-400 mt-0.5">
                                             {{ tutor.alumno.matricula }}
                                         </p>
                                     </div>
-                                    <span v-else class="badge badge-red"
-                                        >Sin Alumno</span
-                                    >
+                                    <span v-else class="badge badge-red">Sin Alumno</span>
                                 </td>
                                 <td>
-                                    <div
-                                        class="table-actions flex justify-center gap-2"
-                                    >
+                                    <div class="table-actions">
                                         <button
-                                            v-if="
-                                                !tutor.t1_telegram_chat_id &&
-                                                tutor.t1_email
-                                            "
+                                            v-if="!tutor.t1_telegram_chat_id && tutor.t1_email"
                                             @click="enviarInvitacion(tutor)"
-                                            class="table-action-btn bg-orange-50 text-orange-500 hover:bg-orange-500 hover:text-white dark:bg-orange-500/10 dark:text-orange-400 transition-all"
-                                            v-tippy="
-                                                'Enviar Invitación Telegram'
-                                            "
+                                            class="table-action-btn bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+                                            title="Enviar Invitación Telegram"
+                                            aria-label="Enviar Invitación Telegram"
                                         >
-                                            <i
-                                                class="fas fa-envelope-open-text"
-                                            ></i>
+                                            <i class="fas fa-paper-plane text-xs"></i>
                                         </button>
                                         <button
                                             v-if="tutor.t1_telegram_chat_id"
                                             @click="abrirModalMensaje(tutor)"
-                                            class="table-action-btn bg-sky-50 text-sky-500 hover:bg-sky-500 hover:text-white dark:bg-sky-500/10 dark:text-sky-400 transition-all"
-                                            v-tippy="'Enviar Mensaje Directo'"
+                                            class="table-action-btn bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-500/10"
+                                            title="Enviar Mensaje Directo"
+                                            aria-label="Enviar Mensaje Directo"
                                         >
-                                            <i class="fas fa-paper-plane"></i>
+                                            <i class="fab fa-telegram-plane text-xs"></i>
                                         </button>
                                         <button
                                             @click="abrirModalEditar(tutor)"
-                                            class="table-action-btn bg-slate-100 text-slate-500 hover:text-white hover:bg-secondary dark:bg-slate-700/50 dark:text-slate-400 transition-all"
-                                            v-tippy="'Editar Tutor'"
+                                            class="table-action-btn bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-primary hover:bg-sky-50 dark:hover:bg-sky-500/10"
+                                            title="Editar Tutor"
+                                            aria-label="Editar Tutor"
                                         >
-                                            <i class="fas fa-edit"></i>
+                                            <i class="fas fa-pen text-xs"></i>
                                         </button>
                                         <button
                                             @click="eliminarTutor(tutor.id)"
-                                            class="table-action-btn bg-red-50 text-red-500 hover:bg-red-500 hover:text-white dark:bg-red-500/10 dark:text-red-400 transition-all"
-                                            v-tippy="'Eliminar Tutor'"
+                                            class="table-action-btn bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+                                            title="Eliminar Tutor"
+                                            aria-label="Eliminar Tutor"
                                         >
-                                            <i class="fas fa-trash"></i>
+                                            <i class="fas fa-trash-alt text-xs"></i>
                                         </button>
                                     </div>
                                 </td>
@@ -357,371 +322,178 @@ const eliminarTutor = (id) => {
                                 <td colspan="4">
                                     <div class="empty-state">
                                         <div class="empty-state-icon">
-                                            <i
-                                                class="fas fa-users-slash text-2xl"
-                                            ></i>
+                                            <i class="fas fa-users-slash text-2xl"></i>
                                         </div>
-                                        <p
-                                            class="text-slate-500 font-bold text-lg"
-                                        >
-                                            No hay tutores registrados con ese
-                                            criterio.
-                                        </p>
+                                        <p class="text-slate-700 dark:text-slate-300 font-bold text-sm">No hay tutores encontrados</p>
+                                        <p class="text-slate-400 text-xs mt-1">Registra o vincula un tutor a un alumno.</p>
                                     </div>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+
                 <!-- Pagination -->
-                <div
-                    class="p-4 border-t border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30"
-                >
+                <div v-if="tutores.links" class="p-4 border-t border-slate-200/70 dark:border-white/[0.08] bg-slate-50/30 dark:bg-slate-900/20">
                     <Pagination :links="tutores.links" />
                 </div>
             </div>
+
         </div>
 
-        <!-- Modal Formulario -->
-        <Transition
-            enter-active-class="transition-opacity duration-300"
-            enter-from-class="opacity-0"
-            enter-to-class="opacity-100"
-            leave-active-class="transition-opacity duration-200"
-            leave-from-class="opacity-100"
-            leave-to-class="opacity-0"
-        >
-            <div
-                v-if="mostrarModal"
-                class="fixed inset-0 z-50 flex items-center justify-center p-4"
-            >
-                <div
-                    class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-                    @click="mostrarModal = false"
-                ></div>
+        <!-- Modal Registrar / Editar Tutor (Apple Dialog) -->
+        <div v-if="mostrarModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="fixed inset-0 bg-slate-950/65 backdrop-blur-md" @click="mostrarModal = false"></div>
 
-                <div
-                    class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md w-full max-w-md rounded-3xl shadow-2xl z-10 relative overflow-hidden border border-white/20 dark:border-slate-700/50"
-                    @click.stop
-                >
-                    <div
-                        class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary to-secondary"
-                    ></div>
-                    <div
-                        class="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50"
-                    >
-                        <h3
-                            class="font-black text-slate-800 dark:text-white text-xl font-display tracking-tight"
-                        >
+            <div class="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-white/60 dark:border-white/10 overflow-hidden z-10 flex flex-col max-h-[90vh]">
+                <div class="modal-accent-bar"></div>
+
+                <div class="p-5 border-b border-slate-200/70 dark:border-white/[0.08] flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
+                    <div>
+                        <h3 class="font-display font-black text-lg text-slate-900 dark:text-white tracking-tight">
                             Datos del Tutor
                         </h3>
-                        <button
-                            @click="mostrarModal = false"
-                            class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors"
-                            v-tippy="'Cerrar'"
-                        >
-                            <i class="fas fa-times"></i>
+                        <p class="text-xs text-slate-400 font-medium mt-0.5">Asignación de padre o tutor legal</p>
+                    </div>
+                    <button @click="mostrarModal = false" class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-white flex items-center justify-center">
+                        <i class="fas fa-times text-sm"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="guardarTutor" class="p-5 overflow-y-auto custom-scroll space-y-4">
+                    <div>
+                        <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                            Alumno Vinculado *
+                        </label>
+                        <select v-model="form.matricula_alumno" required class="input-premium w-full cursor-pointer text-xs">
+                            <option value="" disabled>Seleccione un alumno...</option>
+                            <option v-for="alumno in alumnos" :key="alumno.matricula" :value="alumno.matricula">
+                                {{ alumno.nombre }} {{ alumno.apellido }} ({{ alumno.matricula }})
+                            </option>
+                        </select>
+                        <p v-if="form.errors.matricula_alumno" class="text-rose-500 text-xs font-semibold mt-1">{{ form.errors.matricula_alumno }}</p>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                            Nombre Completo del Tutor *
+                        </label>
+                        <input
+                            type="text"
+                            v-model="form.t1_nombre"
+                            required
+                            class="input-premium w-full uppercase"
+                            placeholder="Ej. MARÍA LÓPEZ HERNÁNDEZ"
+                        />
+                        <p v-if="form.errors.t1_nombre" class="text-rose-500 text-xs font-semibold mt-1">{{ form.errors.t1_nombre }}</p>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                            Teléfono de Contacto (WhatsApp) *
+                        </label>
+                        <input
+                            type="tel"
+                            v-model="form.t1_telefono"
+                            required
+                            class="input-premium w-full"
+                            placeholder="10 dígitos"
+                        />
+                        <p v-if="form.errors.t1_telefono" class="text-rose-500 text-xs font-semibold mt-1">{{ form.errors.t1_telefono }}</p>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                            Correo Electrónico (Opcional)
+                        </label>
+                        <input
+                            type="email"
+                            v-model="form.t1_email"
+                            class="input-premium w-full"
+                            placeholder="tutor@ejemplo.com"
+                        />
+                        <p v-if="form.errors.t1_email" class="text-rose-500 text-xs font-semibold mt-1">{{ form.errors.t1_email }}</p>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                            Telegram Chat ID (Opcional)
+                        </label>
+                        <input
+                            type="text"
+                            v-model="form.t1_telegram_chat_id"
+                            class="input-premium w-full"
+                            placeholder="Ej. 123456789"
+                        />
+                        <p v-if="form.errors.t1_telegram_chat_id" class="text-rose-500 text-xs font-semibold mt-1">{{ form.errors.t1_telegram_chat_id }}</p>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                            Foto de Perfil (Opcional)
+                        </label>
+                        <input
+                            type="file"
+                            @change="handleFotoChange"
+                            accept="image/jpeg, image/png, image/jpg"
+                            class="input-premium w-full file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer"
+                        />
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-200/70 dark:border-white/[0.08] flex justify-end gap-3">
+                        <button type="button" @click="mostrarModal = false" class="btn-ghost">Cancelar</button>
+                        <button type="submit" :disabled="form.processing" class="btn-premium">
+                            <i class="fas fa-circle-notch fa-spin text-xs" v-if="form.processing"></i>
+                            <i class="fas fa-check text-xs" v-else></i>
+                            <span>Guardar Tutor</span>
                         </button>
                     </div>
-
-                    <div class="p-6">
-                        <form @submit.prevent="guardarTutor">
-                            <div class="space-y-4">
-                                <div>
-                                    <label
-                                        class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2"
-                                        >Alumno Vinculado</label
-                                    >
-                                    <select
-                                        v-model="form.matricula_alumno"
-                                        required
-                                        class="input-premium w-full text-sm"
-                                    >
-                                        <option value="" disabled>
-                                            Seleccione un alumno...
-                                        </option>
-                                        <option
-                                            v-for="alumno in alumnos"
-                                            :key="alumno.matricula"
-                                            :value="alumno.matricula"
-                                        >
-                                            {{ alumno.nombre }}
-                                            {{ alumno.apellido }} ({{
-                                                alumno.matricula
-                                            }})
-                                        </option>
-                                    </select>
-                                    <p
-                                        v-if="form.errors.matricula_alumno"
-                                        class="text-red-500 text-xs font-bold mt-1"
-                                    >
-                                        {{ form.errors.matricula_alumno }}
-                                    </p>
-                                </div>
-
-                                <div>
-                                    <label
-                                        class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2"
-                                        >Nombre Completo del Tutor</label
-                                    >
-                                    <input
-                                        type="text"
-                                        v-model="form.t1_nombre"
-                                        required
-                                        autofocus
-                                        class="input-premium w-full text-sm uppercase"
-                                        placeholder="Ej. JUAN PÉREZ"
-                                    />
-                                    <p
-                                        v-if="form.errors.t1_nombre"
-                                        class="text-red-500 text-xs font-bold mt-1"
-                                    >
-                                        {{ form.errors.t1_nombre }}
-                                    </p>
-                                </div>
-
-                                <div>
-                                    <label
-                                        class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2"
-                                        >Teléfono (WhatsApp)</label
-                                    >
-                                    <input
-                                        type="text"
-                                        v-model="form.t1_telefono"
-                                        required
-                                        class="input-premium w-full text-sm"
-                                        placeholder="10 dígitos"
-                                    />
-                                    <p
-                                        v-if="form.errors.t1_telefono"
-                                        class="text-red-500 text-xs font-bold mt-1"
-                                    >
-                                        {{ form.errors.t1_telefono }}
-                                    </p>
-                                </div>
-
-                                <div>
-                                    <label
-                                        class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2"
-                                        >Correo Electrónico (Opcional)</label
-                                    >
-                                    <input
-                                        type="email"
-                                        v-model="form.t1_email"
-                                        class="input-premium w-full text-sm"
-                                        placeholder="correo@ejemplo.com"
-                                    />
-                                    <p
-                                        v-if="form.errors.t1_email"
-                                        class="text-red-500 text-xs font-bold mt-1"
-                                    >
-                                        {{ form.errors.t1_email }}
-                                    </p>
-                                </div>
-
-                                <div>
-                                    <label
-                                        class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2"
-                                        >Telegram Chat ID (Opcional)</label
-                                    >
-                                    <input
-                                        type="text"
-                                        v-model="form.t1_telegram_chat_id"
-                                        class="input-premium w-full text-sm"
-                                        placeholder="Ej. 123456789"
-                                    />
-                                    <p
-                                        v-if="form.errors.t1_telegram_chat_id"
-                                        class="text-red-500 text-xs font-bold mt-1"
-                                    >
-                                        {{ form.errors.t1_telegram_chat_id }}
-                                    </p>
-                                </div>
-
-                                <div>
-                                    <label
-                                        class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2"
-                                        >Foto de Perfil (Opcional)</label
-                                    >
-                                    <input
-                                        type="file"
-                                        @change="handleFotoChange"
-                                        accept="image/jpeg, image/png, image/jpg"
-                                        class="input-premium w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                                    />
-                                </div>
-                            </div>
-
-                            <div class="mt-8 flex justify-end gap-3">
-                                <button
-                                    type="button"
-                                    @click="mostrarModal = false"
-                                    class="btn-secondary"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    :disabled="form.processing"
-                                    class="btn-premium"
-                                >
-                                    <i
-                                        class="fas fa-spinner fa-spin mr-2"
-                                        v-if="form.processing"
-                                    ></i>
-                                    Guardar Tutor
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                </form>
             </div>
-        </Transition>
+        </div>
 
-        <!-- Modal Enviar Mensaje -->
-        <Transition
-            enter-active-class="transition-opacity duration-300"
-            enter-from-class="opacity-0"
-            enter-to-class="opacity-100"
-            leave-active-class="transition-opacity duration-200"
-            leave-from-class="opacity-100"
-            leave-to-class="opacity-0"
-        >
-            <div
-                v-if="mostrarModalMensaje"
-                class="fixed inset-0 z-50 flex items-center justify-center p-4"
-            >
-                <div
-                    class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-                    @click="mostrarModalMensaje = false"
-                ></div>
+        <!-- Modal Enviar Mensaje Telegram -->
+        <div v-if="mostrarModalMensaje" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="fixed inset-0 bg-slate-950/65 backdrop-blur-md" @click="mostrarModalMensaje = false"></div>
 
-                <div
-                    class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md w-full max-w-md rounded-3xl shadow-2xl z-10 relative overflow-hidden border border-white/20 dark:border-slate-700/50"
-                    @click.stop
-                >
-                    <div
-                        class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-sky-400 to-sky-500"
-                    ></div>
-                    <div
-                        class="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50"
-                    >
-                        <h3
-                            class="font-black text-slate-800 dark:text-white text-xl font-display tracking-tight"
-                        >
-                            Mensaje Directo
-                        </h3>
+            <div class="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-white/60 dark:border-white/10 overflow-hidden z-10 p-6">
+                <div class="flex justify-between items-center mb-5">
+                    <div>
+                        <h3 class="font-display font-black text-lg text-slate-900 dark:text-white">Mensaje Directo</h3>
+                        <p class="text-xs text-sky-600 dark:text-sky-400 font-semibold mt-0.5">
+                            Destinatario: {{ tutorSeleccionado?.t1_nombre }}
+                        </p>
+                    </div>
+                    <button @click="mostrarModalMensaje = false" class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-white flex items-center justify-center">
+                        <i class="fas fa-times text-sm"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="enviarMensaje" class="space-y-4">
+                    <textarea
+                        v-model="formMensaje.mensaje"
+                        required
+                        autofocus
+                        rows="4"
+                        class="input-premium w-full resize-none text-xs"
+                        placeholder="Escribe el comunicado o reporte para el tutor..."
+                    ></textarea>
+                    <p v-if="formMensaje.errors.mensaje" class="text-rose-500 text-xs font-semibold">{{ formMensaje.errors.mensaje }}</p>
+
+                    <div class="flex justify-end gap-3">
+                        <button type="button" @click="mostrarModalMensaje = false" class="btn-ghost">Cancelar</button>
                         <button
-                            @click="mostrarModalMensaje = false"
-                            class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors"
-                            v-tippy="'Cerrar'"
+                            type="submit"
+                            :disabled="formMensaje.processing || !tutorSeleccionado?.t1_telegram_chat_id"
+                            class="btn-premium flex items-center gap-2"
                         >
-                            <i class="fas fa-times"></i>
+                            <i class="fas fa-paper-plane text-xs"></i>
+                            <span>{{ formMensaje.processing ? 'Enviando...' : 'Enviar por Telegram' }}</span>
                         </button>
                     </div>
-
-                    <div class="p-6">
-                        <form @submit.prevent="enviarMensaje">
-                            <div
-                                class="mb-4 bg-sky-50 p-4 rounded-2xl border border-sky-100 flex items-center gap-3"
-                            >
-                                <div
-                                    class="w-10 h-10 rounded-full bg-white text-sky-500 flex items-center justify-center font-black shadow-sm"
-                                >
-                                    <i class="fab fa-telegram-plane"></i>
-                                </div>
-                                <div>
-                                    <p
-                                        class="text-[10px] font-black text-slate-500 uppercase tracking-widest"
-                                    >
-                                        Destinatario
-                                    </p>
-                                    <p
-                                        class="text-sm font-black text-slate-800 uppercase"
-                                    >
-                                        {{ tutorSeleccionado?.t1_nombre }}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div class="space-y-4">
-                                <div>
-                                    <label
-                                        class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2"
-                                        >Escribe tu mensaje</label
-                                    >
-                                    <textarea
-                                        v-model="formMensaje.mensaje"
-                                        required
-                                        autofocus
-                                        rows="4"
-                                        class="input-premium w-full text-sm resize-none"
-                                        placeholder="Escriba aquí el comunicado para el padre o tutor..."
-                                    ></textarea>
-                                    <p
-                                        v-if="formMensaje.errors.mensaje"
-                                        class="text-red-500 text-xs font-bold mt-1"
-                                    >
-                                        {{ formMensaje.errors.mensaje }}
-                                    </p>
-                                    <p
-                                        class="text-xs font-bold text-slate-400 mt-2"
-                                    >
-                                        <i class="fas fa-info-circle"></i> El
-                                        mensaje se enviará instantáneamente por
-                                        Telegram.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div class="mt-8 flex justify-end gap-3">
-                                <button
-                                    type="button"
-                                    @click="mostrarModalMensaje = false"
-                                    class="btn-ghost"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    :disabled="
-                                        formMensaje.processing ||
-                                        !tutorSeleccionado?.t1_telegram_chat_id
-                                    "
-                                    class="btn-premium flex items-center justify-center gap-2"
-                                    style="
-                                        background: linear-gradient(
-                                            135deg,
-                                            #0ea5e9,
-                                            #0284c7
-                                        );
-                                        box-shadow: 0 8px 24px -6px
-                                            rgba(14, 165, 233, 0.4);
-                                    "
-                                >
-                                    <span
-                                        v-if="
-                                            !tutorSeleccionado?.t1_telegram_chat_id
-                                        "
-                                        >Sin Telegram vinculado</span
-                                    >
-                                    <span v-else>
-                                        <i
-                                            class="fas fa-spinner fa-spin mr-2"
-                                            v-if="formMensaje.processing"
-                                        ></i>
-                                        Enviando...
-                                        <i
-                                            class="fas fa-paper-plane"
-                                            v-if="!formMensaje.processing"
-                                        ></i>
-                                    </span>
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                </form>
             </div>
-        </Transition>
+        </div>
+
     </AuthenticatedLayout>
 </template>

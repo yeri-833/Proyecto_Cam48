@@ -2,6 +2,19 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo. El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [SemVer (Versionamiento Semántico)](https://semver.org/lang/es/).
 
+## [1.4.1] - 2026-10-11
+
+### Modificado
+- **Rediseño Visual Integral de la UI**: Actualización completa de todas las vistas del sistema (Dashboard, Escáner, Historial, Expedientes, Personal, Tutores, Agenda, Estadísticas, Login, Credenciales) con mejoras de consistencia visual, rendimiento de renderizado y experiencia de usuario.
+- **AuthenticatedLayout & GuestLayout**: Optimización del layout principal y del layout de invitado para mejor responsividad y jerarquía visual.
+- **Componentes Reutilizables**: Actualización de `Modal`, `Pagination`, `DangerButton`, `SecondaryButton`, `TextInput` y `ApplicationLogo` para alinear estilos con el sistema de diseño global del proyecto.
+- **Sistema CSS (app.css)**: Refactorización y optimización de clases, reducción de duplicados y limpieza de estilos obsoletos.
+- **Configuración de Tailwind**: Ajuste de `tailwind.config.js` para incluir tokens y variantes actualizadas.
+- **Controladores Backend (EstadisticasController, HistorialController)**: Ajustes en la lógica de presentación y ordenamiento de datos para los módulos de estadísticas e historial.
+- **Migración de Índices**: Ajuste en `optimizar_indices_asistencia` para compatibilidad con el nuevo esquema polimórfico.
+
+---
+
 ## [1.4.0] - 2026-10-11
 
 ### Añadido

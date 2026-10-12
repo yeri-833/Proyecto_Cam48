@@ -37,18 +37,17 @@ const checkTelegramSync = async () => {
                     timer: 5000,
                     timerProgressBar: true,
                     icon: 'success',
-                    title: `¡Tutor Vinculado!`,
+                    title: '¡Tutor Vinculado!',
                     text: `${nombre} ha conectado su Telegram.`,
-                    customClass: { popup: 'rounded-xl shadow-lg border border-slate-100' }
+                    customClass: { popup: 'rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800' }
                 });
             });
-            // Recargar datos si estamos en tutores
             if (window.location.pathname.includes('/tutores')) {
                 router.reload({ only: ['tutores'] });
             }
         }
     } catch (e) {
-        // Falla silenciosamente para no interrumpir al usuario
+        // Falla silenciosamente para no interrumpir
     }
 };
 
@@ -62,15 +61,13 @@ onMounted(() => {
         document.documentElement.classList.remove('dark');
     }
 
-    // Optimización: Solo consultar Telegram si estamos en páginas donde se necesita (Personal o Tutores)
-    // y aumentar el tiempo a 60 segundos para no bloquear el servidor local de Artisan.
+    // Polling condicional para tutores y personal
     const isRelevantPage = window.location.pathname.includes('/tutores') || window.location.pathname.includes('/personal');
-    
     if (isRelevantPage) {
-        syncInterval = setInterval(checkTelegramSync, 60000); // 60 segundos
+        syncInterval = setInterval(checkTelegramSync, 60000);
     }
 
-    // Eventos de Navegación para Skeleton Loader
+    // Eventos de Navegación para Skeleton / Loading
     router.on('start', () => { isNavigating.value = true; });
     router.on('finish', () => { isNavigating.value = false; });
 });
@@ -83,16 +80,17 @@ const confirmarSalida = () => {
     Swal.fire({
         title: '¿Cerrar sesión?',
         text: 'Tendrás que ingresar tus credenciales de nuevo.',
-        icon: 'warning',
+        icon: 'question',
         showCancelButton: true,
-        confirmButtonText: 'Sí, salir',
+        confirmButtonText: 'Sí, cerrar sesión',
         cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#009FE3',
+        cancelButtonColor: '#64748b',
         customClass: {
             popup: 'swal2-popup',
-            title: 'swal2-title',
-            confirmButton: 'swal2-confirm',
-            cancelButton: 'swal2-cancel',
-            icon: 'swal2-icon'
+            title: 'swal2-title font-display',
+            confirmButton: 'btn-premium',
+            cancelButton: 'btn-ghost'
         }
     }).then((result) => {
         if (result.isConfirmed) {
@@ -103,36 +101,51 @@ const confirmarSalida = () => {
 </script>
 
 <template>
-    <div class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans flex min-h-screen overflow-hidden transition-colors duration-500 relative" @keydown.escape="menuOpen = false">
+    <div class="bg-slate-50 dark:bg-[#0b0f19] text-slate-800 dark:text-slate-100 font-sans flex min-h-screen overflow-hidden transition-colors duration-300 relative" @keydown.escape="menuOpen = false">
         
-        <!-- Dark Mode Background Orbs -->
-        <div v-if="isDark" class="fixed inset-0 overflow-hidden pointer-events-none z-0">
-            <div class="absolute -top-[10%] -left-[10%] w-[40vw] h-[40vw] rounded-full bg-primary/10 blur-[100px] animate-blob mix-blend-screen"></div>
-            <div class="absolute top-[20%] -right-[10%] w-[30vw] h-[30vw] rounded-full bg-secondary/15 blur-[120px] animate-blob animation-delay-2000 mix-blend-screen"></div>
-            <div class="absolute -bottom-[20%] left-[20%] w-[40vw] h-[40vw] rounded-full bg-blue-500/10 blur-[100px] animate-blob animation-delay-4000 mix-blend-screen"></div>
+        <!-- Subtle Ambient Background Light (Calm & Elegant, no jarring blobs) -->
+        <div class="fixed inset-0 pointer-events-none overflow-hidden z-0">
+            <div class="absolute -top-32 -left-32 w-[45vw] h-[45vw] rounded-full bg-sky-400/[0.07] dark:bg-sky-500/[0.04] blur-[120px]"></div>
+            <div class="absolute top-[25%] -right-20 w-[40vw] h-[40vw] rounded-full bg-purple-500/[0.05] dark:bg-purple-600/[0.03] blur-[140px]"></div>
         </div>
-        <!-- Mobile menu overlay -->
-        <Transition enter-active-class="transition-opacity duration-300" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition-opacity duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0">
-            <div v-show="menuOpen" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 md:hidden" @click="menuOpen = false"></div>
+
+        <!-- Mobile Backdrop Scrim -->
+        <Transition 
+            enter-active-class="transition-opacity duration-300 ease-out" 
+            enter-from-class="opacity-0" 
+            enter-to-class="opacity-100" 
+            leave-active-class="transition-opacity duration-200 ease-in" 
+            leave-from-class="opacity-100" 
+            leave-to-class="opacity-0"
+        >
+            <div 
+                v-show="menuOpen" 
+                class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 md:hidden" 
+                @click="menuOpen = false"
+                aria-hidden="true"
+            ></div>
         </Transition>
 
-        <!-- Sidebar Premium -->
-        <aside :class="{'translate-x-0': menuOpen, '-translate-x-full': !menuOpen, 'md:translate-x-0': true}" 
-               class="sidebar-shell w-64 text-white fixed md:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 ease-in-out flex flex-col">
-            
-            <!-- Decorative glow -->
-            <div class="absolute -top-32 -left-32 w-64 h-64 bg-primary/10 rounded-full blur-[100px] pointer-events-none"></div>
-            <div class="absolute bottom-20 -right-20 w-48 h-48 bg-secondary/8 rounded-full blur-[80px] pointer-events-none"></div>
-
-            <!-- Logo Section -->
-            <div class="p-6 border-b border-white/[0.06] relative">
+        <!-- Sidebar (macOS Style Vibrancy) -->
+        <aside 
+            :class="[
+                menuOpen ? 'translate-x-0' : '-translate-x-full',
+                'md:translate-x-0'
+            ]" 
+            class="sidebar-shell w-64 text-white fixed md:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col shrink-0"
+            aria-label="Navegación principal"
+        >
+            <!-- Header Branding -->
+            <div class="p-5 border-b border-white/[0.08] relative">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/10">
-                        <img src="/Logo del CAM.png" alt="Logo CAM" class="h-7 object-contain">
+                    <div class="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-sm shrink-0">
+                        <img src="/Logo del CAM.png" alt="Logo CAM #48" class="h-7 w-auto object-contain drop-shadow">
                     </div>
-                    <div>
-                        <h2 class="font-display font-black text-lg tracking-tight leading-none">CAM <span class="text-primary">#48</span></h2>
-                        <p class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-0.5">Panel Admin</p>
+                    <div class="min-w-0">
+                        <h2 class="font-display font-black text-base tracking-tight leading-tight flex items-center gap-1">
+                            Family<span class="text-sky-400">Lock</span>
+                        </h2>
+                        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-0.5">CAM #48</p>
                     </div>
                 </div>
             </div>
@@ -140,114 +153,203 @@ const confirmarSalida = () => {
             <!-- Navigation Links -->
             <nav class="flex-1 px-3 py-4 space-y-1 text-[13px] font-medium custom-scroll overflow-y-auto relative">
                 
-                <p class="text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] px-3 pt-2 pb-3">Principal</p>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-1 pb-2">Principal</p>
 
-                <Link :href="route('dashboard')" :class="route().current('dashboard') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group">
-                    <i class="fas fa-th-large w-5 text-center" :class="route().current('dashboard') ? 'text-primary' : 'text-slate-500 group-hover:text-primary'"></i> Dashboard
+                <Link 
+                    :href="route('dashboard')" 
+                    :class="route().current('dashboard') ? 'sidebar-link-active' : 'sidebar-link'" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
+                >
+                    <div class="w-6 text-center text-sm" :class="route().current('dashboard') ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-200'">
+                        <i class="fas fa-th-large"></i>
+                    </div>
+                    <span>Dashboard</span>
                 </Link>
 
-                <Link href="/personal" :class="$page.url.startsWith('/personal') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group">
-                    <i class="fas fa-chalkboard-teacher w-5 text-center" :class="$page.url.startsWith('/personal') ? 'text-primary' : 'text-slate-500 group-hover:text-primary'"></i> Personal
+                <Link 
+                    href="/personal" 
+                    :class="$page.url.startsWith('/personal') ? 'sidebar-link-active' : 'sidebar-link'" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
+                >
+                    <div class="w-6 text-center text-sm" :class="$page.url.startsWith('/personal') ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-200'">
+                        <i class="fas fa-chalkboard-teacher"></i>
+                    </div>
+                    <span>Personal</span>
                 </Link>
 
-                <Link :href="route('tutores.index')" :class="route().current('tutores.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group">
-                    <i class="fas fa-users w-5 text-center" :class="route().current('tutores.index') ? 'text-primary' : 'text-slate-500 group-hover:text-primary'"></i> Tutores
+                <Link 
+                    :href="route('tutores.index')" 
+                    :class="route().current('tutores.index') ? 'sidebar-link-active' : 'sidebar-link'" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
+                >
+                    <div class="w-6 text-center text-sm" :class="route().current('tutores.index') ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-200'">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <span>Tutores</span>
                 </Link>
 
-                <p class="text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] px-3 pt-4 pb-3">Operación</p>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-4 pb-2">Operación</p>
 
-                <Link :href="route('historial.index')" :class="route().current('historial.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group">
-                    <i class="fas fa-history w-5 text-center" :class="route().current('historial.index') ? 'text-primary' : 'text-slate-500 group-hover:text-primary'"></i> Historial
+                <Link 
+                    :href="route('historial.index')" 
+                    :class="route().current('historial.index') ? 'sidebar-link-active' : 'sidebar-link'" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
+                >
+                    <div class="w-6 text-center text-sm" :class="route().current('historial.index') ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-200'">
+                        <i class="fas fa-history"></i>
+                    </div>
+                    <span>Historial</span>
                 </Link>
 
-                <Link :href="route('expedientes.index')" :class="route().current('expedientes.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group">
-                    <i class="fas fa-folder-open w-5 text-center" :class="route().current('expedientes.index') ? 'text-primary' : 'text-slate-500 group-hover:text-primary'"></i> Expedientes
+                <Link 
+                    :href="route('expedientes.index')" 
+                    :class="route().current('expedientes.index') ? 'sidebar-link-active' : 'sidebar-link'" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
+                >
+                    <div class="w-6 text-center text-sm" :class="route().current('expedientes.index') ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-200'">
+                        <i class="fas fa-folder-open"></i>
+                    </div>
+                    <span>Expedientes</span>
                 </Link>
                 
-                <Link :href="route('asistencia.escaner')" :class="route().current('asistencia.escaner') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group">
-                    <i class="fas fa-qrcode w-5 text-center" :class="route().current('asistencia.escaner') ? 'text-primary' : 'text-slate-500 group-hover:text-primary'"></i> Pase de Lista
+                <Link 
+                    :href="route('asistencia.escaner')" 
+                    :class="route().current('asistencia.escaner') ? 'sidebar-link-active' : 'sidebar-link'" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
+                >
+                    <div class="w-6 text-center text-sm" :class="route().current('asistencia.escaner') ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-200'">
+                        <i class="fas fa-qrcode"></i>
+                    </div>
+                    <span>Pase de Lista</span>
                 </Link>
 
-                <Link :href="route('credenciales.index')" :class="route().current('credenciales.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group">
-                    <i class="fas fa-id-card w-5 text-center" :class="route().current('credenciales.index') ? 'text-primary' : 'text-slate-500 group-hover:text-primary'"></i> Credenciales
+                <Link 
+                    :href="route('credenciales.index')" 
+                    :class="route().current('credenciales.index') ? 'sidebar-link-active' : 'sidebar-link'" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
+                >
+                    <div class="w-6 text-center text-sm" :class="route().current('credenciales.index') ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-200'">
+                        <i class="fas fa-id-card"></i>
+                    </div>
+                    <span>Credenciales</span>
                 </Link>
 
-                <p class="text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] px-3 pt-4 pb-3">Análisis</p>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-4 pb-2">Análisis</p>
                 
-                <Link :href="route('estadisticas.index')" :class="route().current('estadisticas.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group">
-                    <i class="fas fa-chart-pie w-5 text-center" :class="route().current('estadisticas.index') ? 'text-primary' : 'text-slate-500 group-hover:text-primary'"></i> Estadísticas
+                <Link 
+                    :href="route('estadisticas.index')" 
+                    :class="route().current('estadisticas.index') ? 'sidebar-link-active' : 'sidebar-link'" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
+                >
+                    <div class="w-6 text-center text-sm" :class="route().current('estadisticas.index') ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-200'">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <span>Estadísticas</span>
                 </Link>
                 
-                <Link :href="route('eventos.index')" :class="route().current('eventos.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group">
-                    <i class="fas fa-calendar-alt w-5 text-center" :class="route().current('eventos.index') ? 'text-primary' : 'text-slate-500 group-hover:text-primary'"></i> Agenda
+                <Link 
+                    :href="route('eventos.index')" 
+                    :class="route().current('eventos.index') ? 'sidebar-link-active' : 'sidebar-link'" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
+                >
+                    <div class="w-6 text-center text-sm" :class="route().current('eventos.index') ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-200'">
+                        <i class="fas fa-calendar-alt"></i>
+                    </div>
+                    <span>Agenda</span>
                 </Link>
             </nav>
 
-            <!-- User Profile / Logout -->
-            <div class="p-3 border-t border-white/[0.06] relative">
-                <div class="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.04] transition-colors cursor-default mb-2">
-                    <div class="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center font-display font-black text-xs text-white shadow-lg shadow-primary/20 shrink-0">
+            <!-- User Footer Profile / Logout -->
+            <div class="p-3 border-t border-white/[0.08] relative">
+                <Link :href="route('profile.edit')" class="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] transition-colors mb-1 group" title="Ver Perfil">
+                    <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center font-display font-black text-xs text-white shadow-sm shrink-0 border border-white/20">
                         {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
                     </div>
                     <div class="min-w-0 flex-1">
-                        <p class="text-xs font-bold text-slate-300 truncate">{{ user.name }}</p>
-                        <p class="text-[10px] text-slate-500 truncate">{{ user.email }}</p>
+                        <p class="text-xs font-bold text-slate-200 truncate group-hover:text-white transition-colors">{{ user.name }}</p>
+                        <p class="text-[10px] text-slate-400 truncate">{{ user.email }}</p>
                     </div>
-                </div>
-                <button @click="confirmarSalida" class="w-full flex items-center justify-center gap-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 p-2.5 rounded-xl transition-all font-bold text-xs group">
-                    <i class="fas fa-arrow-right-from-bracket group-hover:text-red-400 transition-colors"></i> Cerrar Sesión
+                    <i class="fas fa-chevron-right text-[10px] text-slate-500 group-hover:text-slate-300 transition-colors"></i>
+                </Link>
+                <button 
+                    @click="confirmarSalida" 
+                    class="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-2 rounded-xl transition-all font-semibold text-xs active:scale-[0.98]"
+                >
+                    <i class="fas fa-power-off text-xs"></i> Cerrar Sesión
                 </button>
             </div>
         </aside>
 
         <!-- Main Content Area -->
-        <main class="flex-1 h-screen overflow-y-auto custom-scroll relative z-10">
+        <main class="flex-1 h-screen overflow-y-auto custom-scroll relative z-10 flex flex-col">
             
-            <!-- Animated Background Blobs -->
-            <div class="fixed inset-0 pointer-events-none overflow-hidden z-0">
-                <div class="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-primary/20 dark:bg-primary/10 blur-[100px] animate-blob mix-blend-multiply dark:mix-blend-screen opacity-70"></div>
-                <div class="absolute top-[20%] right-[-10%] w-[35vw] h-[35vw] rounded-full bg-secondary/20 dark:bg-secondary/10 blur-[100px] animate-blob animation-delay-2000 mix-blend-multiply dark:mix-blend-screen opacity-70"></div>
-                <div class="absolute bottom-[-20%] left-[20%] w-[45vw] h-[45vw] rounded-full bg-sky-400/20 dark:bg-sky-400/10 blur-[120px] animate-blob animation-delay-4000 mix-blend-multiply dark:mix-blend-screen opacity-70"></div>
-            </div>
-
-            <!-- Top Navigation Bar -->
-            <nav class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-b border-slate-200/40 dark:border-slate-700/40 py-3 px-6 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-colors duration-500">
+            <!-- Top Navigation Bar (Translucent Glass Layer - Apple Principle §12) -->
+            <nav class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border-b border-slate-200/70 dark:border-white/[0.08] py-3.5 px-6 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-colors duration-300 shrink-0">
                 <div class="flex items-center gap-4">
-                    <button @click="menuOpen = !menuOpen" class="md:hidden w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 text-slate-500 hover:text-primary flex items-center justify-center transition-all">
+                    <button 
+                        @click="menuOpen = !menuOpen" 
+                        class="md:hidden w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-primary/10 hover:text-primary flex items-center justify-center transition-all active:scale-95"
+                        aria-label="Abrir menú de navegación"
+                    >
                         <i class="fas fa-bars"></i>
                     </button>
+                    
                     <div id="portal-header-title" class="md:hidden"></div>
                     
-                    <!-- Welcome Message (Left Side) -->
+                    <!-- Welcome / Breadcrumb Area -->
                     <div class="hidden md:flex flex-col items-start justify-center">
-                        <p class="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] leading-none mb-1">Bienvenido,</p>
-                        <p class="text-lg font-black text-slate-700 dark:text-slate-200 leading-none">{{ user.name }}</p>
+                        <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">
+                            Centro de Atención Múltiple #48
+                        </p>
+                        <p class="text-base font-black text-slate-800 dark:text-white leading-none font-display">
+                            {{ user.name }}
+                        </p>
                     </div>
                 </div>
                 
-                <div class="flex items-center gap-3">
-                    <!-- Dark Mode Toggle -->
-                    <button @click="toggleTheme" class="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 text-slate-500 dark:text-slate-400 hover:text-primary transition-all flex items-center justify-center shadow-sm relative overflow-hidden" title="Alternar Modo Oscuro">
-                        <Transition enter-active-class="transition-transform duration-300" enter-from-class="rotate-180 scale-0" enter-to-class="rotate-0 scale-100" leave-active-class="transition-transform duration-300 absolute" leave-from-class="rotate-0 scale-100" leave-to-class="-rotate-180 scale-0">
-                            <i v-if="!isDark" class="fas fa-moon text-xl absolute"></i>
-                            <i v-else class="fas fa-sun text-xl absolute text-yellow-400"></i>
-                        </Transition>
+                <div class="flex items-center gap-2.5">
+                    <!-- Dark Mode Toggle Button (Apple tactile response) -->
+                    <button 
+                        @click="toggleTheme" 
+                        class="w-10 h-10 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/60 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-primary transition-all flex items-center justify-center active:scale-95 shadow-sm" 
+                        :title="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+                        :aria-label="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+                    >
+                        <i v-if="!isDark" class="fas fa-moon text-sm"></i>
+                        <i v-else class="fas fa-sun text-sm text-amber-400"></i>
                     </button>
 
-                    <Link :href="route('profile.edit')" class="w-11 h-11 md:w-12 md:h-12 rounded-full bg-gradient-primary text-white flex items-center justify-center font-display font-black text-base shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all z-10 shrink-0 border-2 border-white dark:border-slate-800" :title="user.name">
-                        {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
+                    <!-- User Profile Avatar Pill -->
+                    <Link 
+                        :href="route('profile.edit')" 
+                        class="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/60 dark:border-white/10 hover:border-primary/40 transition-all active:scale-95 shadow-sm"
+                        title="Configurar Perfil"
+                    >
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-500 to-blue-600 text-white flex items-center justify-center font-display font-black text-xs shadow-sm">
+                            {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
+                        </div>
+                        <span class="text-xs font-bold text-slate-700 dark:text-slate-200 hidden sm:inline">
+                            Perfil
+                        </span>
                     </Link>
                 </div>
             </nav>
 
             <!-- Page Content -->
-            <div class="relative min-h-[calc(100vh-80px)]">
-                <!-- Skeleton Overlay -->
-                <Transition enter-active-class="transition-opacity duration-300" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition-opacity duration-300" leave-from-class="opacity-100" leave-to-class="opacity-0">
-                    <div v-if="isNavigating" class="absolute inset-0 z-20 bg-white/50 dark:bg-slate-900/50 backdrop-blur-[2px] flex items-center justify-center pointer-events-none">
-                        <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 flex items-center gap-3">
-                            <i class="fas fa-circle-notch fa-spin text-primary text-xl"></i>
-                            <span class="font-bold text-slate-600 dark:text-slate-300 text-sm">Cargando...</span>
+            <div class="relative flex-1">
+                <!-- Navigation Transition Loader -->
+                <Transition 
+                    enter-active-class="transition-opacity duration-200" 
+                    enter-from-class="opacity-0" 
+                    enter-to-class="opacity-100" 
+                    leave-active-class="transition-opacity duration-200" 
+                    leave-from-class="opacity-100" 
+                    leave-to-class="opacity-0"
+                >
+                    <div v-if="isNavigating" class="absolute inset-0 z-30 bg-slate-900/10 dark:bg-black/30 backdrop-blur-[2px] flex items-center justify-center pointer-events-none">
+                        <div class="bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl px-5 py-3 rounded-2xl shadow-xl border border-slate-200/60 dark:border-white/10 flex items-center gap-3">
+                            <i class="fas fa-circle-notch fa-spin text-primary text-base"></i>
+                            <span class="font-bold text-slate-700 dark:text-slate-200 text-xs tracking-wide">Cargando...</span>
                         </div>
                     </div>
                 </Transition>

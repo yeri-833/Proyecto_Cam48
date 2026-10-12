@@ -1,12 +1,15 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
 import Swal from 'sweetalert2';
 import Pagination from '@/Components/Pagination.vue';
 
 const props = defineProps({
-    personal: Object,
+    personal: {
+        type: Object,
+        default: () => ({ data: [], links: [] }),
+    },
 });
 
 const busqueda = ref('');
@@ -29,8 +32,9 @@ const form = useForm({
 });
 
 const personalFiltrado = computed(() => {
+    if (!props.personal?.data) return [];
     if (!busqueda.value) return props.personal.data;
-    const q = busqueda.value.toLowerCase();
+    const q = busqueda.value.toLowerCase().trim();
     return props.personal.data.filter(p =>
         (p.nombre_completo && String(p.nombre_completo).toLowerCase().includes(q)) ||
         (p.id && String(p.id).toLowerCase().includes(q)) ||
@@ -77,8 +81,13 @@ const guardar = () => {
             onSuccess: () => {
                 modalAbierto.value = false;
                 Swal.fire({
-                    toast: true, position: 'top-end', showConfirmButton: false, timer: 3000,
-                    icon: 'success', title: 'Personal actualizado'
+                    toast: true, 
+                    position: 'top-end', 
+                    showConfirmButton: false, 
+                    timer: 3000,
+                    icon: 'success', 
+                    title: 'Personal actualizado exitosamente',
+                    customClass: { popup: 'rounded-2xl' }
                 });
             }
         });
@@ -88,8 +97,13 @@ const guardar = () => {
             onSuccess: () => {
                 modalAbierto.value = false;
                 Swal.fire({
-                    toast: true, position: 'top-end', showConfirmButton: false, timer: 3000,
-                    icon: 'success', title: 'Personal registrado'
+                    toast: true, 
+                    position: 'top-end', 
+                    showConfirmButton: false, 
+                    timer: 3000,
+                    icon: 'success', 
+                    title: 'Personal registrado exitosamente',
+                    customClass: { popup: 'rounded-2xl' }
                 });
             }
         });
@@ -98,26 +112,30 @@ const guardar = () => {
 
 const eliminar = (id) => {
     Swal.fire({
-        title: '¿Estás seguro?',
-        text: "El registro será dado de baja del sistema.",
+        title: '¿Dar de baja registro?',
+        text: "El docente o colaborador será dado de baja del sistema.",
         icon: 'warning',
         showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#64748b',
         confirmButtonText: 'Sí, dar de baja',
         cancelButtonText: 'Cancelar',
         customClass: {
-            popup: 'swal2-popup', title: 'swal2-title',
-            confirmButton: 'bg-red-500 rounded-2xl text-white font-bold px-6 py-3 shadow-lg',
-            cancelButton: 'bg-slate-100 rounded-2xl text-slate-500 font-bold px-6 py-3',
-            icon: 'swal2-icon'
-        },
-        buttonsStyling: false
+            popup: 'swal2-popup',
+            confirmButton: 'bg-rose-600 text-white font-bold px-5 py-2.5 rounded-xl',
+            cancelButton: 'btn-ghost'
+        }
     }).then((result) => {
         if (result.isConfirmed) {
             form.delete(route('personal.destroy', id), {
                 onSuccess: () => {
                     Swal.fire({
-                        toast: true, position: 'top-end', showConfirmButton: false, timer: 3000,
-                        icon: 'success', title: 'Baja exitosa'
+                        toast: true, 
+                        position: 'top-end', 
+                        showConfirmButton: false, 
+                        timer: 3000,
+                        icon: 'success', 
+                        title: 'Baja completada'
                     });
                 }
             });
@@ -149,8 +167,12 @@ const enviarMensaje = () => {
         onSuccess: () => {
             modalMensaje.value = false;
             Swal.fire({
-                toast: true, position: 'top-end', showConfirmButton: false, timer: 3000,
-                icon: 'success', title: 'Mensaje enviado exitosamente'
+                toast: true, 
+                position: 'top-end', 
+                showConfirmButton: false, 
+                timer: 3000,
+                icon: 'success', 
+                title: 'Mensaje enviado a Telegram'
             });
         }
     });
@@ -161,10 +183,11 @@ const enviarMensajeMasivo = () => {
         onSuccess: () => {
             modalMensajeMasivo.value = false;
             Swal.fire({
-                title: '¡Aviso Enviado!',
-                text: 'El aviso masivo ha sido enviado a todo el personal vinculado.',
+                title: '¡Aviso Emitido!',
+                text: 'El aviso masivo ha sido despachado a todo el personal vinculado.',
                 icon: 'success',
-                confirmButtonColor: '#0ea5e9'
+                confirmButtonColor: '#009FE3',
+                customClass: { popup: 'rounded-2xl' }
             });
         }
     });
@@ -172,17 +195,23 @@ const enviarMensajeMasivo = () => {
 
 const enviarInvitacion = (p) => {
     const texto = p.email 
-        ? `Se enviará un correo electrónico a ${p.email} con el enlace mágico para vincular su cuenta.` 
-        : `El docente no tiene correo registrado. El sistema generará un enlace mágico para que se lo envíes por WhatsApp.`;
+        ? `Se enviará un correo a ${p.email} con el enlace de vinculación a Telegram.` 
+        : `El docente no tiene correo registrado. Se generará un enlace para compartir.`;
 
     Swal.fire({
-        title: '¿Generar Link de Telegram?',
+        title: '¿Vincular Telegram?',
         text: texto,
         icon: 'question',
         showCancelButton: true,
-        confirmButtonColor: '#f97316',
+        confirmButtonColor: '#009FE3',
+        cancelButtonColor: '#64748b',
         confirmButtonText: 'Sí, continuar',
-        cancelButtonText: 'Cancelar'
+        cancelButtonText: 'Cancelar',
+        customClass: {
+            popup: 'swal2-popup',
+            confirmButton: 'btn-premium',
+            cancelButton: 'btn-ghost'
+        }
     }).then((result) => {
         if (result.isConfirmed) {
             router.post(route('personal.invitacion', p.id));
@@ -192,38 +221,51 @@ const enviarInvitacion = (p) => {
 </script>
 
 <template>
-    <Head title="Gestión de Personal" />
+    <Head title="Personal del Plantel — FamilyLock" />
 
     <AuthenticatedLayout>
-        <!-- Teleporting header title for Mobile Nav if needed -->
-        <Teleport to="#portal-header-title" v-if="mounted">
-            <h1 class="font-display font-black text-xl text-slate-800 dark:text-white tracking-tight">Administración de <span class="text-secondary">Personal</span></h1>
+        <Teleport to="#portal-header-title" v-if="$el">
+            <h1 class="font-display font-black text-lg text-slate-900 dark:text-white">Personal</h1>
         </Teleport>
 
-        <div class="p-6 md:p-8 max-w-7xl mx-auto animate-fade-in-up">
+        <div class="p-6 md:p-8 max-w-7xl mx-auto">
             
-            <div class="mb-8 hidden md:block">
-                <h1 class="font-display font-black text-3xl text-slate-800 dark:text-white tracking-tight">
-                    Administración de <span class="text-secondary">Personal</span>
-                </h1>
+            <!-- Page Header -->
+            <div class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 class="font-display font-black text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight">
+                        Personal del <span class="text-gradient-secondary">Plantel</span>
+                    </h1>
+                    <p class="text-slate-500 dark:text-slate-400 font-medium text-xs sm:text-sm mt-1">
+                        Directorio de docentes, psicólogos, trabajadores sociales y colaboradores.
+                    </p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <button @click="modalMensajeMasivo = true" class="btn-ghost flex items-center gap-2 text-sky-600 dark:text-sky-400">
+                        <i class="fas fa-bullhorn text-xs"></i> <span>Aviso Masivo</span>
+                    </button>
+                    <button @click="abrirModalNuevo" class="btn-premium flex items-center gap-2">
+                        <i class="fas fa-user-plus text-xs"></i> <span>Nuevo Colaborador</span>
+                    </button>
+                </div>
             </div>
 
-            <div class="premium-card overflow-hidden">
-                <div class="p-6 md:p-8 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 dark:border-slate-700/50">
-                    <div class="flex items-center gap-4">
-                        <h2 class="text-2xl font-black text-slate-700 dark:text-slate-200">Personal del Plantel</h2>
-                        <button @click="modalMensajeMasivo = true" class="bg-sky-500 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg shadow-sky-500/20 hover:bg-sky-600 transition-all flex items-center gap-2">
-                            <i class="fas fa-bullhorn"></i> Aviso Masivo
-                        </button>
-                        <button @click="abrirModalNuevo" class="bg-secondary text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg shadow-purple-500/20 hover:bg-purple-700 transition-all flex items-center gap-2">
-                            <i class="fas fa-user-plus"></i> Nuevo Registro
-                        </button>
+            <!-- Table Card -->
+            <div class="premium-card-static overflow-hidden">
+                <div class="p-5 border-b border-slate-200/70 dark:border-white/[0.08] flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50 dark:bg-slate-900/40">
+                    <div class="relative w-full sm:w-80">
+                        <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input 
+                            type="text" 
+                            v-model="busqueda" 
+                            placeholder="Buscar por nombre o ID..." 
+                            class="input-premium w-full pl-9 pr-4 py-2 text-xs"
+                        />
                     </div>
-                    <div class="relative w-full md:w-96">
-                        <i class="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-500"></i>
-                        <input type="text" v-model="busqueda" placeholder="Buscar por nombre o ID..." 
-                               class="input-premium w-full pl-12 text-sm">
-                    </div>
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {{ personalFiltrado.length }} miembros registrados
+                    </span>
                 </div>
 
                 <div class="overflow-x-auto">
@@ -233,20 +275,33 @@ const enviarInvitacion = (p) => {
                                 <th>ID / Función</th>
                                 <th>Nombre Completo</th>
                                 <th>Categoría</th>
+                                <th>Contacto</th>
                                 <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody v-auto-animate>
+                        <tbody>
                             <tr v-for="p in personalFiltrado" :key="p.id" class="group">
                                 <td>
-                                    <p class="font-mono font-black text-secondary">{{ p.id }}</p>
-                                    <p class="text-[10px] font-bold text-slate-400 mt-1">{{ p.funcion || 'Sin función' }}</p>
+                                    <span class="font-mono font-bold text-xs text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-200/50 dark:border-purple-500/20">
+                                        {{ p.id }}
+                                    </span>
+                                    <p class="text-[11px] text-slate-400 font-medium mt-1">
+                                        {{ p.funcion || 'Sin función' }}
+                                    </p>
                                 </td>
                                 <td>
-                                    <p class="font-bold text-slate-700 dark:text-slate-200 uppercase text-sm">{{ p.nombre_completo }}</p>
-                                    <p class="text-[10px] font-bold text-slate-400 mt-1 uppercase">{{ p.rfc }}</p>
-                                    <div v-if="p.telegram_chat_id" class="flex items-center gap-2 text-sky-500 font-bold text-xs mt-1">
-                                        <i class="fab fa-telegram-plane text-sky-400"></i> Vinculado
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-xs uppercase text-slate-600 dark:text-slate-300 shrink-0">
+                                            {{ p.nombre_completo?.charAt(0) || 'P' }}
+                                        </div>
+                                        <div>
+                                            <p class="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase leading-tight">
+                                                {{ p.nombre_completo }}
+                                            </p>
+                                            <p v-if="p.rfc" class="text-[10px] text-slate-400 font-mono mt-0.5 uppercase">
+                                                RFC: {{ p.rfc }}
+                                            </p>
+                                        </div>
                                     </div>
                                 </td>
                                 <td>
@@ -255,92 +310,160 @@ const enviarInvitacion = (p) => {
                                     </span>
                                 </td>
                                 <td>
-                                    <div class="flex justify-center gap-3">
-                                        <button v-if="!p.telegram_chat_id" @click="enviarInvitacion(p)" class="table-action-btn bg-orange-50 text-orange-500 hover:bg-orange-500 hover:text-white dark:bg-orange-500/10 dark:text-orange-400 transition-all" v-tippy="'Vincular Telegram'">
-                                            <i class="fas fa-link"></i>
+                                    <div class="text-xs">
+                                        <span v-if="p.telefono" class="font-mono text-slate-600 dark:text-slate-300 block">
+                                            {{ p.telefono }}
+                                        </span>
+                                        <div v-if="p.telegram_chat_id" class="inline-flex items-center gap-1.5 text-sky-500 font-semibold text-[11px] mt-0.5">
+                                            <i class="fab fa-telegram-plane"></i> <span>Vinculado</span>
+                                        </div>
+                                        <span v-else class="text-slate-400 text-[11px]">Sin Telegram</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="table-actions">
+                                        <button 
+                                            v-if="!p.telegram_chat_id" 
+                                            @click="enviarInvitacion(p)" 
+                                            class="table-action-btn bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10" 
+                                            title="Vincular Telegram"
+                                            aria-label="Vincular Telegram"
+                                        >
+                                            <i class="fas fa-link text-xs"></i>
                                         </button>
-                                        <button v-if="p.telegram_chat_id" @click="abrirModalMensaje(p)" class="table-action-btn bg-sky-50 text-sky-500 hover:bg-sky-500 hover:text-white dark:bg-sky-500/10 dark:text-sky-400 transition-all" v-tippy="'Enviar Mensaje'">
-                                            <i class="fab fa-telegram-plane"></i>
+                                        <button 
+                                            v-if="p.telegram_chat_id" 
+                                            @click="abrirModalMensaje(p)" 
+                                            class="table-action-btn bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-500/10" 
+                                            title="Enviar Mensaje Directo"
+                                            aria-label="Enviar Mensaje Directo"
+                                        >
+                                            <i class="fab fa-telegram-plane text-xs"></i>
                                         </button>
-                                        <button @click="abrirModalEditar(p)" class="table-action-btn bg-slate-100 text-slate-500 hover:text-white hover:bg-secondary dark:bg-slate-700/50 dark:text-slate-400 transition-all" v-tippy="'Editar Personal'">
-                                            <i class="fas fa-edit"></i>
+                                        <button 
+                                            @click="abrirModalEditar(p)" 
+                                            class="table-action-btn bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-primary hover:bg-sky-50 dark:hover:bg-sky-500/10" 
+                                            title="Editar Personal"
+                                            aria-label="Editar Personal"
+                                        >
+                                            <i class="fas fa-pen text-xs"></i>
                                         </button>
-                                        <button @click="eliminar(p.id)" class="table-action-btn bg-red-50 text-red-500 hover:bg-red-500 hover:text-white dark:bg-red-500/10 dark:text-red-400 transition-all" v-tippy="'Dar de Baja'">
-                                            <i class="fas fa-trash"></i>
+                                        <button 
+                                            @click="eliminar(p.id)" 
+                                            class="table-action-btn bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10" 
+                                            title="Dar de Baja"
+                                            aria-label="Dar de Baja"
+                                        >
+                                            <i class="fas fa-trash-alt text-xs"></i>
                                         </button>
                                     </div>
                                 </td>
                             </tr>
                             <tr v-if="personalFiltrado.length === 0">
-                                <td colspan="4" class="px-8 py-10 text-center text-slate-400 font-bold">
-                                    No se encontraron registros.
+                                <td colspan="5">
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">
+                                            <i class="fas fa-chalkboard-teacher text-2xl"></i>
+                                        </div>
+                                        <p class="text-slate-700 dark:text-slate-300 font-bold text-sm">No se encontraron colaboradores</p>
+                                        <p class="text-slate-400 text-xs mt-1">Modifica el término de búsqueda o agrega un nuevo colaborador.</p>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+
                 <!-- Pagination -->
-                <div class="p-4 border-t border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30">
+                <div v-if="personal.links" class="p-4 border-t border-slate-200/70 dark:border-white/[0.08] bg-slate-50/30 dark:bg-slate-900/20">
                     <Pagination :links="personal.links" />
                 </div>
             </div>
+
         </div>
 
-        <!-- Modal -->
-        <div v-show="modalAbierto" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="modalAbierto = false"></div>
-            
-            <div class="bg-white w-full max-w-2xl rounded-[2.5rem] p-8 shadow-2xl z-10 animate-fade-in-up relative overflow-hidden max-h-[95vh] overflow-y-auto custom-scroll">
-                
-                <div class="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-secondary to-purple-500"></div>
-                
-                <div class="flex justify-between items-center mb-6 mt-2">
+        <!-- Modal Registrar / Editar Personal (Apple Modal) -->
+        <div v-if="modalAbierto" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="fixed inset-0 bg-slate-950/65 backdrop-blur-md" @click="modalAbierto = false"></div>
+
+            <div class="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-white/60 dark:border-white/10 overflow-hidden z-10 max-h-[90vh] flex flex-col">
+                <div class="modal-accent-bar"></div>
+
+                <div class="p-5 sm:p-6 border-b border-slate-200/70 dark:border-white/[0.08] flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
                     <div>
-                        <h2 class="text-2xl font-black text-slate-800">{{ modoEdicion ? 'Editar Personal' : 'Nuevo Integrante' }}</h2>
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Gestión administrativa del personal</p>
+                        <h3 class="font-display font-black text-lg text-slate-900 dark:text-white tracking-tight">
+                            {{ modoEdicion ? 'Editar Colaborador' : 'Registrar Nuevo Colaborador' }}
+                        </h3>
+                        <p class="text-xs text-slate-400 font-medium mt-0.5">Gestión de datos de personal docente y administrativo</p>
                     </div>
-                    <button @click="modalAbierto = false" class="text-slate-400 hover:text-slate-600 bg-slate-100 w-8 h-8 rounded-full flex items-center justify-center transition-all" v-tippy="'Cerrar'">
-                        <i class="fas fa-times"></i>
+                    <button @click="modalAbierto = false" class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-all">
+                        <i class="fas fa-times text-sm"></i>
                     </button>
                 </div>
-                
-                <form @submit.prevent="guardar" class="space-y-4">
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <form @submit.prevent="guardar" class="p-5 sm:p-6 overflow-y-auto custom-scroll flex-1 space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">ID (Matrícula QR)</label>
-                            <div class="relative">
-                                <input type="text" v-model="form.id" placeholder="Ej. DOC-01" 
-                                       class="w-full border-2 rounded-2xl px-5 py-3 font-bold uppercase transition-all outline-none" 
-                                       :class="modoEdicion ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-secondary text-slate-700'"
-                                       :disabled="modoEdicion" required>
-                                <i v-show="modoEdicion" class="fas fa-lock absolute right-5 top-1/2 -translate-y-1/2 text-slate-300"></i>
-                            </div>
-                            <p v-if="form.errors.id" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.id }}</p>
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                ID / Matrícula QR *
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="form.id" 
+                                placeholder="Ej. DOC-01" 
+                                class="input-premium w-full uppercase"
+                                :disabled="modoEdicion" 
+                                required
+                            />
+                            <p v-if="form.errors.id" class="text-rose-500 text-xs font-semibold mt-1">{{ form.errors.id }}</p>
                         </div>
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">RFC</label>
-                            <input type="text" v-model="form.rfc" placeholder="Ej. VECJ880326" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 uppercase outline-none focus:border-secondary transition-all">
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Nombre Completo</label>
-                            <input type="text" v-model="form.nombre_completo" placeholder="Nombre completo" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 uppercase outline-none focus:border-secondary transition-all" required>
-                            <p v-if="form.errors.nombre_completo" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.nombre_completo }}</p>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Correo Electrónico</label>
-                            <input type="email" v-model="form.email" placeholder="ejemplo@correo.com" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all">
-                            <p v-if="form.errors.email" class="text-red-500 text-xs font-bold mt-1">{{ form.errors.email }}</p>
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                RFC
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="form.rfc" 
+                                placeholder="Ej. VECJ880326" 
+                                class="input-premium w-full uppercase"
+                            />
                         </div>
                     </div>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Categoría (Rol General)</label>
-                            <select v-model="form.categoria" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all cursor-pointer">
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                Nombre Completo *
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="form.nombre_completo" 
+                                placeholder="Nombre completo" 
+                                class="input-premium w-full uppercase" 
+                                required
+                            />
+                            <p v-if="form.errors.nombre_completo" class="text-rose-500 text-xs font-semibold mt-1">{{ form.errors.nombre_completo }}</p>
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                Correo Electrónico
+                            </label>
+                            <input 
+                                type="email" 
+                                v-model="form.email" 
+                                placeholder="docente@cam48.gob.mx" 
+                                class="input-premium w-full"
+                            />
+                            <p v-if="form.errors.email" class="text-rose-500 text-xs font-semibold mt-1">{{ form.errors.email }}</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                Categoría General
+                            </label>
+                            <select v-model="form.categoria" class="input-premium w-full cursor-pointer">
                                 <option value="Docente">Docente</option>
                                 <option value="Directivo">Directivo</option>
                                 <option value="Psicología">Psicología</option>
@@ -350,134 +473,161 @@ const enviarInvitacion = (p) => {
                             </select>
                         </div>
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Función Específica</label>
-                            <input type="text" v-model="form.funcion" placeholder="Ej. Maestra de Comunicación" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all">
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                Función Específica
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="form.funcion" 
+                                placeholder="Ej. Docente de Comunicación" 
+                                class="input-premium w-full"
+                            />
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Clave de Plaza</label>
-                            <input type="text" v-model="form.plaza" placeholder="Ej. E0281" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all">
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                Clave de Plaza
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="form.plaza" 
+                                placeholder="Ej. E0281" 
+                                class="input-premium w-full"
+                            />
                         </div>
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Grado / Grupo Asignado</label>
-                            <input type="text" v-model="form.grado_grupo" placeholder="Ej. 1ro A" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all">
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                Grado / Grupo Asignado
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="form.grado_grupo" 
+                                placeholder="Ej. 1ro A" 
+                                class="input-premium w-full"
+                            />
                         </div>
                     </div>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Teléfono de Contacto</label>
-                            <input type="tel" v-model="form.telefono" placeholder="10 dígitos" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all">
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                Teléfono de Contacto
+                            </label>
+                            <input 
+                                type="tel" 
+                                v-model="form.telefono" 
+                                placeholder="10 dígitos" 
+                                class="input-premium w-full"
+                            />
                         </div>
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Telegram Chat ID (Opcional)</label>
-                            <input type="text" v-model="form.telegram_chat_id" placeholder="Ej. 123456789" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all">
+                            <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                                Telegram Chat ID
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="form.telegram_chat_id" 
+                                placeholder="Ej. 123456789" 
+                                class="input-premium w-full"
+                            />
                         </div>
                     </div>
-                    
+
                     <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Foto de Perfil (Opcional)</label>
-                        <input type="file" @change="handleFotoChange" accept="image/jpeg, image/png, image/jpg" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-secondary transition-all file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-secondary/10 file:text-secondary hover:file:bg-secondary/20 cursor-pointer">
+                        <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">
+                            Foto de Perfil (Opcional)
+                        </label>
+                        <input 
+                            type="file" 
+                            @change="handleFotoChange" 
+                            accept="image/jpeg, image/png, image/jpg" 
+                            class="input-premium w-full file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer"
+                        />
                     </div>
-                    
-                    <div class="flex gap-3 pt-6 border-t border-slate-100 mt-2">
-                        <button type="button" @click="modalAbierto = false" class="w-1/3 bg-slate-100 text-slate-500 py-3.5 rounded-2xl font-bold hover:bg-slate-200 transition-all shadow-sm">Cancelar</button>
-                        <button type="submit" :disabled="form.processing" class="w-2/3 bg-secondary text-white py-3.5 rounded-2xl font-black shadow-lg shadow-purple-500/30 hover:bg-purple-600 transition-all flex justify-center items-center gap-2" :class="{'opacity-75': form.processing}">
-                            <i class="fas fa-spinner fa-spin" v-if="form.processing"></i>
-                            <i class="fas fa-save" v-else></i> 
-                            {{ modoEdicion ? 'Guardar Cambios' : 'Crear Registro' }}
+
+                    <div class="pt-4 border-t border-slate-200/70 dark:border-white/[0.08] flex justify-end gap-3">
+                        <button type="button" @click="modalAbierto = false" class="btn-ghost">
+                            Cancelar
+                        </button>
+                        <button type="submit" :disabled="form.processing" class="btn-premium">
+                            <i class="fas fa-circle-notch fa-spin text-xs" v-if="form.processing"></i>
+                            <i class="fas fa-check text-xs" v-else></i>
+                            <span>{{ modoEdicion ? 'Guardar Cambios' : 'Registrar Colaborador' }}</span>
                         </button>
                     </div>
                 </form>
             </div>
         </div>
-        
+
         <!-- Modal Mensaje Directo Telegram -->
-        <Transition enter-active-class="transition-opacity duration-300" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition-opacity duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0">
-            <div v-if="modalMensaje" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="modalMensaje = false"></div>
-                <div class="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl z-10 relative overflow-hidden" @click.stop>
-                    <div class="absolute top-0 left-0 w-full h-2 bg-sky-500"></div>
+        <div v-if="modalMensaje" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="fixed inset-0 bg-slate-950/65 backdrop-blur-md" @click="modalMensaje = false"></div>
+            <div class="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-white/60 dark:border-white/10 overflow-hidden z-10 p-6">
+                <div class="flex justify-between items-center mb-5">
+                    <div>
+                        <h3 class="font-display font-black text-lg text-slate-900 dark:text-white">Mensaje Directo</h3>
+                        <p class="text-xs text-sky-600 dark:text-sky-400 font-semibold mt-0.5">
+                            Para: {{ personalSeleccionado?.nombre_completo }}
+                        </p>
+                    </div>
+                    <button @click="modalMensaje = false" class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-white flex items-center justify-center">
+                        <i class="fas fa-times text-sm"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="enviarMensaje" class="space-y-4">
+                    <textarea 
+                        v-model="formMensaje.mensaje" 
+                        required 
+                        rows="4" 
+                        class="input-premium w-full resize-none text-xs" 
+                        placeholder="Escribe el mensaje o aviso institucional para este docente..."
+                    ></textarea>
                     
-                    <div class="flex justify-between items-center mb-6">
-                        <div>
-                            <h2 class="text-2xl font-black text-slate-800">Mensaje Directo</h2>
-                            <p class="text-xs font-bold text-slate-400 mt-1">Para: <span class="text-sky-500">{{ personalSeleccionado?.nombre_completo }}</span></p>
-                        </div>
-                        <button @click="modalMensaje = false" class="text-slate-400 hover:bg-slate-100 w-8 h-8 rounded-xl flex items-center justify-center transition-colors" v-tippy="'Cerrar'">
-                            <i class="fas fa-times"></i>
+                    <div class="flex justify-end gap-3">
+                        <button type="button" @click="modalMensaje = false" class="btn-ghost">Cancelar</button>
+                        <button type="submit" :disabled="formMensaje.processing" class="btn-premium flex items-center gap-2">
+                            <i class="fas fa-paper-plane text-xs"></i> <span>Enviar Mensaje</span>
                         </button>
                     </div>
-
-                    <form @submit.prevent="enviarMensaje">
-                        <div class="mb-4 bg-sky-50 p-4 rounded-2xl border border-sky-100 flex gap-3">
-                            <div class="w-10 h-10 rounded-full bg-white text-sky-500 flex items-center justify-center font-black shadow-sm shrink-0">
-                                <i class="fab fa-telegram-plane"></i>
-                            </div>
-                            <div class="w-full">
-                                <textarea v-model="formMensaje.mensaje" required rows="4" class="w-full bg-transparent border-none p-0 text-sm outline-none resize-none placeholder-slate-400 text-slate-700" placeholder="Escriba aquí el comunicado para el docente..."></textarea>
-                                <p v-if="formMensaje.errors.mensaje" class="text-red-500 text-xs font-bold mt-1">{{ formMensaje.errors.mensaje }}</p>
-                            </div>
-                        </div>
-                        
-                        <button type="submit" :disabled="formMensaje.processing" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-2xl transition-all shadow-lg shadow-sky-500/30 flex items-center justify-center gap-2">
-                            <i class="fas fa-spinner fa-spin" v-if="formMensaje.processing"></i>
-                            <span v-else>Enviar por Telegram <i class="fas fa-paper-plane"></i></span>
-                        </button>
-                    </form>
-                </div>
+                </form>
             </div>
-        </Transition>
+        </div>
 
         <!-- Modal Mensaje Masivo -->
-        <Transition enter-active-class="transition-opacity duration-300" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition-opacity duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0">
-            <div v-if="modalMensajeMasivo" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="modalMensajeMasivo = false"></div>
-                <div class="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl z-10 relative overflow-hidden" @click.stop>
-                    <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-sky-400 to-indigo-500"></div>
+        <div v-if="modalMensajeMasivo" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="fixed inset-0 bg-slate-950/65 backdrop-blur-md" @click="modalMensajeMasivo = false"></div>
+            <div class="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-white/60 dark:border-white/10 overflow-hidden z-10 p-6">
+                <div class="flex justify-between items-center mb-5">
+                    <div>
+                        <h3 class="font-display font-black text-lg text-slate-900 dark:text-white">Aviso Institucional Masivo</h3>
+                        <p class="text-xs text-slate-400 font-medium mt-0.5">Se enviará por Telegram a todo el personal vinculado.</p>
+                    </div>
+                    <button @click="modalMensajeMasivo = false" class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-white flex items-center justify-center">
+                        <i class="fas fa-times text-sm"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="enviarMensajeMasivo" class="space-y-4">
+                    <textarea 
+                        v-model="formMensajeMasivo.mensaje" 
+                        required 
+                        rows="5" 
+                        class="input-premium w-full resize-none text-xs" 
+                        placeholder="Escribe el comunicado oficial para todo el personal..."
+                    ></textarea>
                     
-                    <div class="flex justify-between items-center mb-6">
-                        <div>
-                            <h2 class="text-2xl font-black text-slate-800">Aviso Institucional</h2>
-                            <p class="text-xs font-bold text-slate-400 mt-1">Se enviará a <span class="text-sky-500">Todo el personal vinculado</span></p>
-                        </div>
-                        <button @click="modalMensajeMasivo = false" class="text-slate-400 hover:bg-slate-100 w-8 h-8 rounded-xl flex items-center justify-center transition-colors" v-tippy="'Cerrar'">
-                            <i class="fas fa-times"></i>
+                    <div class="flex justify-end gap-3">
+                        <button type="button" @click="modalMensajeMasivo = false" class="btn-ghost">Cancelar</button>
+                        <button type="submit" :disabled="formMensajeMasivo.processing" class="btn-premium flex items-center gap-2">
+                            <i class="fas fa-bullhorn text-xs"></i> <span>Emitir Comunicado</span>
                         </button>
                     </div>
-
-                    <form @submit.prevent="enviarMensajeMasivo">
-                        <div class="mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3">
-                            <div class="w-10 h-10 rounded-full bg-white text-indigo-500 flex items-center justify-center font-black shadow-sm shrink-0">
-                                <i class="fas fa-bullhorn"></i>
-                            </div>
-                            <div class="w-full">
-                                <textarea v-model="formMensajeMasivo.mensaje" required rows="5" class="w-full bg-transparent border-none p-0 text-sm outline-none resize-none placeholder-slate-400 text-slate-700" placeholder="Escriba aquí el comunicado oficial que será enviado a todos los docentes..."></textarea>
-                                <p v-if="formMensajeMasivo.errors.mensaje" class="text-red-500 text-xs font-bold mt-1">{{ formMensajeMasivo.errors.mensaje }}</p>
-                            </div>
-                        </div>
-                        
-                        <button type="submit" :disabled="formMensajeMasivo.processing" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 rounded-2xl transition-all shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2">
-                            <i class="fas fa-spinner fa-spin" v-if="formMensajeMasivo.processing"></i>
-                            <span v-else>Emitir Aviso Oficial <i class="fas fa-bullhorn"></i></span>
-                        </button>
-                    </form>
-                </div>
+                </form>
             </div>
-        </Transition>
+        </div>
 
     </AuthenticatedLayout>
 </template>
-
-<script>
-export default {
-    data() {
-        return { mounted: false }
-    },
-    mounted() {
-        this.mounted = true
-    }
-}
-</script>

@@ -6,18 +6,32 @@ import Swal from 'sweetalert2';
 import debounce from 'lodash/debounce';
 
 const props = defineProps({
-    registros: Object,
-    fechaFiltro: String,
-    busquedaActual: String,
-    rolActual: String,
-    estadisticas: Object
+    registros: {
+        type: Object,
+        default: () => ({ data: [], links: [] }),
+    },
+    fechaFiltro: {
+        type: String,
+        default: '',
+    },
+    busquedaActual: {
+        type: String,
+        default: '',
+    },
+    rolActual: {
+        type: String,
+        default: 'Todos',
+    },
+    estadisticas: {
+        type: Object,
+        default: () => ({ total: 0, Alumno: 0, Personal: 0, Tutor: 0 }),
+    }
 });
 
 const fechaSeleccionada = ref(props.fechaFiltro);
 const busqueda = ref(props.busquedaActual || '');
 const rolActivo = ref(props.rolActual || 'Todos');
 
-// Actualizar tabla al cambiar filtros (con debounce para la búsqueda)
 const fetchDatos = debounce(() => {
     router.get(route('historial.index'), {
         fecha: fechaSeleccionada.value,
@@ -46,16 +60,25 @@ const eliminarRegistro = (id) => {
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
-        cancelButtonColor: '#94a3b8',
+        cancelButtonColor: '#64748b',
         confirmButtonText: 'Sí, eliminar',
         cancelButtonText: 'Cancelar',
+        customClass: {
+            popup: 'swal2-popup',
+            confirmButton: 'bg-rose-600 text-white font-bold px-5 py-2.5 rounded-xl',
+            cancelButton: 'btn-ghost'
+        }
     }).then((result) => {
         if (result.isConfirmed) {
             router.delete(route('historial.destroy', id), {
                 onSuccess: () => {
                     Swal.fire({
-                        toast: true, position: 'top-end', showConfirmButton: false, timer: 3000,
-                        icon: 'success', title: 'Registro eliminado'
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3000,
+                        icon: 'success',
+                        title: 'Registro eliminado exitosamente'
                     });
                 }
             });
@@ -66,163 +89,200 @@ const eliminarRegistro = (id) => {
 const getColorRol = (rol) => {
     if (rol === 'Alumno') return 'badge-blue';
     if (rol === 'Tutor') return 'badge-amber';
-    return 'badge-emerald'; // Personal
+    return 'badge-emerald';
 };
 
 const getIconoRol = (rol) => {
     if (rol === 'Alumno') return 'fas fa-user-graduate';
-    if (rol === 'Tutor') return 'fas fa-user-friends';
-    return 'fas fa-chalkboard-teacher'; // Personal
+    if (rol === 'Tutor') return 'fas fa-users';
+    return 'fas fa-chalkboard-teacher';
 };
 
 const roles = [
-    { key: 'Todos', label: 'Todos', icon: null, color: 'bg-slate-800' },
-    { key: 'Alumno', label: 'Alumnos', icon: 'fas fa-user-graduate', color: 'bg-primary' },
-    { key: 'Personal', label: 'Personal', icon: 'fas fa-chalkboard-teacher', color: 'bg-emerald-500' },
-    { key: 'Tutor', label: 'Tutores', icon: 'fas fa-user-friends', color: 'bg-amber-500' },
+    { key: 'Todos', label: 'Todos' },
+    { key: 'Alumno', label: 'Alumnos', icon: 'fas fa-user-graduate' },
+    { key: 'Personal', label: 'Personal', icon: 'fas fa-chalkboard-teacher' },
+    { key: 'Tutor', label: 'Tutores', icon: 'fas fa-users' },
 ];
 </script>
 
 <template>
-    <Head title="Historial Diario" />
+    <Head title="Historial Diario — FamilyLock" />
 
     <AuthenticatedLayout>
         <div class="p-6 md:p-8 max-w-7xl mx-auto">
             
-            <!-- Cabecera -->
-            <div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4 animate-fade-in-up">
+            <!-- Page Header -->
+            <div class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 class="font-display font-black text-3xl text-slate-800 dark:text-white tracking-tight">
-                        Historial <span class="text-gradient-primary">Diario</span>
+                    <h1 class="font-display font-black text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight">
+                        Historial <span class="text-gradient-primary">Diario de Accesos</span>
                     </h1>
-                    <p class="text-slate-500 dark:text-slate-400 font-bold text-sm mt-1">Consulta los registros de entradas y salidas.</p>
+                    <p class="text-slate-500 dark:text-slate-400 font-medium text-xs sm:text-sm mt-1">
+                        Bitácora cronológica de entradas y salidas registradas por escáner QR.
+                    </p>
                 </div>
                 
-                <!-- Acciones Derecha -->
-                <div class="flex items-center gap-3 print-hidden">
-                    <!-- Date Picker -->
-                    <div class="flex items-center gap-3 bg-white dark:bg-slate-800/50 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700/50 flex-1 md:flex-auto">
-                        <div class="stat-card-icon w-10 h-10 bg-primary/10 text-primary shrink-0">
-                            <i class="fas fa-calendar-alt"></i>
-                        </div>
-                        <input type="date" v-model="fechaSeleccionada" class="border-none bg-transparent font-black text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:ring-0 mr-2 uppercase text-sm w-full md:w-auto">
+                <!-- Date Picker & Exports -->
+                <div class="flex flex-wrap items-center gap-2.5 print-hidden">
+                    <div class="flex items-center gap-2 bg-white dark:bg-slate-800/80 px-3 py-1.5 rounded-2xl border border-slate-200/70 dark:border-white/10 shadow-sm">
+                        <i class="far fa-calendar text-sky-500 text-xs"></i>
+                        <input 
+                            type="date" 
+                            v-model="fechaSeleccionada" 
+                            class="border-none bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:ring-0 text-xs p-0 uppercase"
+                        />
                     </div>
 
-                    <!-- Export Buttons -->
-                    <button @click="exportarCsv" class="bg-emerald-500 hover:bg-emerald-600 text-white p-3 rounded-2xl shadow-md shadow-emerald-500/20 transition-all hover:-translate-y-0.5 active:translate-y-0 shrink-0 flex items-center gap-2 font-black text-sm" title="Exportar a CSV">
-                        <i class="fas fa-file-excel"></i> <span class="hidden md:inline">CSV</span>
+                    <button @click="exportarCsv" class="btn-ghost flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                        <i class="fas fa-file-excel text-xs"></i> <span>CSV</span>
                     </button>
-                    <button onclick="window.print()" class="bg-primary hover:bg-blue-600 text-white p-3 rounded-2xl shadow-md shadow-primary/20 transition-all hover:-translate-y-0.5 active:translate-y-0 shrink-0 flex items-center gap-2 font-black text-sm" title="Exportar a PDF / Imprimir">
-                        <i class="fas fa-file-pdf"></i> <span class="hidden md:inline">PDF</span>
+                    <button onclick="window.print()" class="btn-ghost flex items-center gap-1.5">
+                        <i class="fas fa-print text-xs"></i> <span>Imprimir</span>
                     </button>
                 </div>
             </div>
 
-            <!-- Resumen Estadístico (Tarjetas) -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 stagger-children">
-                <div class="stat-card border-slate-100">
-                    <div class="stat-card-icon bg-slate-50 dark:bg-slate-700 text-slate-400 dark:text-slate-300"><i class="fas fa-users"></i></div>
+            <!-- Summary Metric Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                <div class="premium-card p-4 sm:p-5 flex items-center gap-3.5">
+                    <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center text-sm shrink-0">
+                        <i class="fas fa-users"></i>
+                    </div>
                     <div>
-                        <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1">Total Hoy</p>
-                        <p class="text-2xl font-black text-slate-800 dark:text-white leading-none font-display">{{ estadisticas.total }}</p>
+                        <p class="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Total Día</p>
+                        <p class="text-2xl font-black text-slate-900 dark:text-white font-mono leading-none mt-0.5">
+                            {{ estadisticas.total }}
+                        </p>
                     </div>
                 </div>
-                <div class="stat-card border-primary/20">
-                    <div class="stat-card-icon bg-primary/10 text-primary"><i class="fas fa-user-graduate"></i></div>
+
+                <div class="premium-card p-4 sm:p-5 flex items-center gap-3.5">
+                    <div class="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center text-sm shrink-0">
+                        <i class="fas fa-user-graduate"></i>
+                    </div>
                     <div>
-                        <p class="text-[10px] font-black uppercase text-primary tracking-widest leading-none mb-1">Alumnos</p>
-                        <p class="text-2xl font-black text-slate-800 dark:text-white leading-none font-display">{{ estadisticas.Alumno }}</p>
+                        <p class="text-[9px] font-bold uppercase text-sky-600 dark:text-sky-400 tracking-wider">Alumnos</p>
+                        <p class="text-2xl font-black text-slate-900 dark:text-white font-mono leading-none mt-0.5">
+                            {{ estadisticas.Alumno }}
+                        </p>
                     </div>
                 </div>
-                <div class="stat-card border-emerald-500/20">
-                    <div class="stat-card-icon bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"><i class="fas fa-chalkboard-teacher"></i></div>
+
+                <div class="premium-card p-4 sm:p-5 flex items-center gap-3.5">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center text-sm shrink-0">
+                        <i class="fas fa-chalkboard-teacher"></i>
+                    </div>
                     <div>
-                        <p class="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest leading-none mb-1">Personal</p>
-                        <p class="text-2xl font-black text-slate-800 dark:text-white leading-none font-display">{{ estadisticas.Personal }}</p>
+                        <p class="text-[9px] font-bold uppercase text-purple-600 dark:text-purple-400 tracking-wider">Personal</p>
+                        <p class="text-2xl font-black text-slate-900 dark:text-white font-mono leading-none mt-0.5">
+                            {{ estadisticas.Personal }}
+                        </p>
                     </div>
                 </div>
-                <div class="stat-card border-amber-500/20">
-                    <div class="stat-card-icon bg-amber-500/10 text-amber-600 dark:text-amber-400"><i class="fas fa-user-friends"></i></div>
+
+                <div class="premium-card p-4 sm:p-5 flex items-center gap-3.5">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm shrink-0">
+                        <i class="fas fa-users"></i>
+                    </div>
                     <div>
-                        <p class="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-widest leading-none mb-1">Tutores</p>
-                        <p class="text-2xl font-black text-slate-800 dark:text-white leading-none font-display">{{ estadisticas.Tutor }}</p>
+                        <p class="text-[9px] font-bold uppercase text-amber-600 dark:text-amber-400 tracking-wider">Tutores</p>
+                        <p class="text-2xl font-black text-slate-900 dark:text-white font-mono leading-none mt-0.5">
+                            {{ estadisticas.Tutor }}
+                        </p>
                     </div>
                 </div>
             </div>
 
-            <!-- Controles de búsqueda y filtros -->
-            <div class="premium-card-static overflow-hidden animate-fade-in-up print-hidden" style="animation-delay: 250ms">
-                <div class="p-4 md:p-6 border-b border-slate-100/80 flex flex-col lg:flex-row justify-between items-center gap-4 bg-slate-50/30">
+            <!-- Table Card with Filter Chips & Search -->
+            <div class="premium-card-static overflow-hidden">
+                <div class="p-4 sm:p-5 border-b border-slate-200/70 dark:border-white/[0.08] flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50/50 dark:bg-slate-900/40">
                     
-                    <!-- Filtros por Rol -->
-                    <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                    <!-- Role Filter Chips -->
+                    <div class="inline-flex p-1 rounded-2xl bg-slate-200/70 dark:bg-slate-800 border border-slate-300/60 dark:border-white/10 text-xs font-bold shadow-inner">
                         <button 
-                            v-for="r in roles" :key="r.key"
+                            v-for="r in roles" 
+                            :key="r.key"
                             @click="rolActivo = r.key" 
-                            :class="rolActivo === r.key ? `${r.color} text-white shadow-md` : 'bg-white text-slate-500 hover:bg-slate-50'" 
-                            class="filter-chip"
+                            :class="rolActivo === r.key ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'"
+                            class="px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5"
                         >
-                            <i v-if="r.icon" :class="r.icon" class="mr-1"></i> {{ r.label }}
+                            <i v-if="r.icon" :class="r.icon" class="text-xs"></i>
+                            <span>{{ r.label }}</span>
                         </button>
                     </div>
 
-                    <!-- Buscador -->
-                    <div class="relative w-full lg:w-96">
-                        <i class="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input type="text" v-model="busqueda" placeholder="Buscar por nombre o matrícula..." 
-                               class="input-premium w-full pl-12 text-sm">
+                    <!-- Search Input -->
+                    <div class="relative w-full md:w-80">
+                        <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input 
+                            type="text" 
+                            v-model="busqueda" 
+                            placeholder="Buscar por nombre o matrícula..." 
+                            class="input-premium w-full pl-9 pr-4 py-2 text-xs"
+                        />
                     </div>
                 </div>
 
-                <!-- Tabla -->
+                <!-- Table Content -->
                 <div class="overflow-x-auto">
                     <table class="table-premium">
                         <thead>
                             <tr>
                                 <th>Hora</th>
                                 <th>Identificación</th>
-                                <th>Persona</th>
+                                <th>Nombre Completo</th>
                                 <th>Rol</th>
                                 <th class="text-center print-hidden">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="reg in registros.data" :key="reg.id">
+                            <tr v-for="reg in registros.data" :key="reg.id" class="group">
                                 <td>
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-2 h-2 rounded-full bg-emerald-400 pulse-soft"></div>
-                                        <p class="font-black text-slate-700 text-sm">{{ reg.hora_formateada }}</p>
+                                    <div class="flex items-center gap-2.5">
+                                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        <span class="font-mono font-bold text-xs text-slate-800 dark:text-slate-200">
+                                            {{ reg.hora_formateada }}
+                                        </span>
                                     </div>
                                 </td>
                                 <td>
-                                    <p class="font-mono font-bold text-slate-400 text-xs">{{ reg.id_persona }}</p>
+                                    <span class="font-mono text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                        {{ reg.id_persona }}
+                                    </span>
                                 </td>
                                 <td>
-                                    <p class="font-bold text-slate-800 text-sm uppercase">{{ reg.nombre_completo }}</p>
+                                    <p class="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase">
+                                        {{ reg.nombre_completo }}
+                                    </p>
                                 </td>
                                 <td>
-                                    <span class="badge flex items-center gap-2 w-max" :class="getColorRol(reg.rol)">
-                                        <i :class="getIconoRol(reg.rol)"></i> {{ reg.rol }}
+                                    <span class="badge" :class="getColorRol(reg.rol)">
+                                        <i :class="getIconoRol(reg.rol)" class="mr-1"></i> {{ reg.rol }}
                                     </span>
                                 </td>
                                 <td class="print-hidden">
                                     <div class="table-actions">
-                                        <button @click="eliminarRegistro(reg.id)" class="table-action-btn bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50" title="Eliminar Registro">
-                                            <i class="fas fa-trash-alt"></i>
+                                        <button 
+                                            @click="eliminarRegistro(reg.id)" 
+                                            class="table-action-btn bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10" 
+                                            title="Eliminar Registro"
+                                            aria-label="Eliminar Registro"
+                                        >
+                                            <i class="fas fa-trash-alt text-xs"></i>
                                         </button>
                                     </div>
                                 </td>
                             </tr>
 
-                            <!-- Empty State -->
                             <tr v-if="registros.data.length === 0">
                                 <td colspan="5">
                                     <div class="empty-state">
                                         <div class="empty-state-icon">
-                                            <i class="fas fa-inbox text-3xl"></i>
+                                            <i class="fas fa-history text-2xl"></i>
                                         </div>
-                                        <p class="text-slate-500 font-bold text-lg">Sin registros</p>
-                                        <p class="text-slate-400 text-sm mt-1">No hay registros de asistencia bajo este filtro.</p>
+                                        <p class="text-slate-700 dark:text-slate-300 font-bold text-sm">Sin registros para esta fecha</p>
+                                        <p class="text-slate-400 text-xs mt-1">Selecciona otra fecha en el calendario o remueve los filtros.</p>
                                     </div>
                                 </td>
                             </tr>
@@ -230,18 +290,26 @@ const roles = [
                     </table>
                 </div>
 
-                <!-- Paginación -->
-                <div v-if="registros.links && registros.links.length > 3" class="pagination-container print-hidden">
-                    <template v-for="(link, k) in registros.links" :key="k">
-                        <Link 
-                            v-if="link.url"
-                            :href="link.url" 
-                            v-html="link.label"
-                            class="pagination-btn"
-                            :class="link.active ? 'pagination-btn-active' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'"
-                        />
-                        <span v-else v-html="link.label" class="pagination-btn text-slate-400 bg-transparent border-transparent cursor-default"></span>
-                    </template>
+                <!-- Pagination -->
+                <div v-if="registros.links && registros.links.length > 3" class="p-4 border-t border-slate-200/70 dark:border-white/[0.08] bg-slate-50/30 dark:bg-slate-900/20 print-hidden">
+                    <div class="flex flex-wrap items-center justify-center gap-1.5">
+                        <template v-for="(link, k) in registros.links" :key="k">
+                            <Link 
+                                v-if="link.url"
+                                :href="link.url" 
+                                v-html="link.label"
+                                class="px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all select-none"
+                                :class="link.active 
+                                    ? 'bg-primary text-white shadow-sm' 
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'"
+                            />
+                            <span 
+                                v-else 
+                                v-html="link.label" 
+                                class="px-3.5 py-1.5 text-xs text-slate-400 cursor-not-allowed select-none"
+                            ></span>
+                        </template>
+                    </div>
                 </div>
             </div>
         </div>
