@@ -7,13 +7,24 @@
         <title inertia>{{ config('app.name', 'CAM #48') }}</title>
 
         <!-- Favicon y PWA -->
-        <link rel="icon" type="image/png" href="/Logo del CAM.png">
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+        <link rel="alternate icon" href="/favicon.ico" type="image/x-icon">
+        <link rel="apple-touch-icon" href="/icono-180.png">
         <link rel="manifest" href="/manifest.json">
         <meta name="theme-color" content="#009FE3">
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="default">
-        <meta name="apple-mobile-web-app-title" content="CAM #48">
+        <meta name="apple-mobile-web-app-title" content="FamilyLock CAM #48">
+
+        <!-- Theme Anti-Flicker Script -->
+        <script>
+            if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        </script>
 
         <!-- Google Fonts: Inter + Outfit -->
         <link rel="preconnect" href="https://fonts.googleapis.com">

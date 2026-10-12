@@ -37,3 +37,6 @@ Thumbs.db
 *_log.txt
 test_*.txt
 test_*.php
+
+# Antigravity/Superpowers embedded repos
+.agents/plugins/superpowers/

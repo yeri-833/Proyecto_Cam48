@@ -13,9 +13,9 @@ import { Link } from '@inertiajs/vue3';
         </div>
 
         <div class="relative z-10 w-full max-w-md flex flex-col items-center">
-            <div class="mb-8">
-                <Link href="/" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-2xl p-1 inline-block">
-                    <ApplicationLogo />
+            <div class="mb-8 flex justify-center">
+                <Link href="/" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-2xl p-1 inline-block transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]">
+                    <ApplicationLogo variant="completo" size="h-36 sm:h-44" alt="CAM Tonalpouhqui #48" />
                 </Link>
             </div>
 

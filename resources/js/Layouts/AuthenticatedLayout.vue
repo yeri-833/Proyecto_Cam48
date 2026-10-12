@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { Link, usePage, router } from '@inertiajs/vue3';
+import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Swal from 'sweetalert2';
 import axios from 'axios';
 
@@ -132,26 +133,28 @@ const confirmarSalida = () => {
                 menuOpen ? 'translate-x-0' : '-translate-x-full',
                 'md:translate-x-0'
             ]" 
-            class="sidebar-shell w-64 text-white fixed md:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col shrink-0"
+            class="sidebar-shell w-64 lg:w-72 text-white fixed md:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col shrink-0"
             aria-label="Navegación principal"
         >
             <!-- Header Branding -->
-            <div class="p-5 border-b border-white/[0.08] relative">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-sm shrink-0">
-                        <img src="/Logo del CAM.png" alt="Logo CAM #48" class="h-7 w-auto object-contain drop-shadow">
-                    </div>
-                    <div class="min-w-0">
-                        <h2 class="font-display font-black text-base tracking-tight leading-tight flex items-center gap-1">
-                            Family<span class="text-sky-400">Lock</span>
-                        </h2>
-                        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-0.5">CAM #48</p>
-                    </div>
-                </div>
+            <div class="px-3 py-4 border-b border-white/[0.08] relative">
+                <Link 
+                    :href="route('dashboard')" 
+                    class="flex items-center justify-start overflow-hidden group focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 rounded-2xl p-1 transition-all w-full"
+                    title="FamilyLock CAM #48 — Dashboard"
+                >
+                    <ApplicationLogo 
+                        variant="horizontal" 
+                        force-theme="dark" 
+                        size="h-16 sm:h-[68px] lg:h-[72px]" 
+                        class="w-full max-w-full transition-transform duration-200 group-hover:scale-[1.02] active:scale-[0.98]" 
+                        alt="CAM Tonalpouhqui #48"
+                    />
+                </Link>
             </div>
 
             <!-- Navigation Links -->
-            <nav class="flex-1 px-3 py-4 space-y-1 text-[13px] font-medium custom-scroll overflow-y-auto relative">
+            <nav class="flex-1 min-h-0 px-3 py-3 space-y-0.5 text-[13px] font-medium custom-scroll overflow-y-auto relative">
                 
                 <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-1 pb-2">Principal</p>
 
@@ -188,7 +191,7 @@ const confirmarSalida = () => {
                     <span>Tutores</span>
                 </Link>
 
-                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-4 pb-2">Operación</p>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-3 pb-2">Operación</p>
 
                 <Link 
                     :href="route('historial.index')" 
@@ -234,7 +237,7 @@ const confirmarSalida = () => {
                     <span>Credenciales</span>
                 </Link>
 
-                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-4 pb-2">Análisis</p>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-3 pb-2">Análisis</p>
                 
                 <Link 
                     :href="route('estadisticas.index')" 
@@ -295,6 +298,13 @@ const confirmarSalida = () => {
                     </button>
                     
                     <div id="portal-header-title" class="md:hidden"></div>
+
+                    <!-- Mobile Institutional Brand in Header -->
+                    <div class="md:hidden flex items-center">
+                        <Link :href="route('dashboard')" class="flex items-center">
+                            <ApplicationLogo variant="horizontal" size="h-9 sm:h-10" alt="CAM Tonalpouhqui #48" />
+                        </Link>
+                    </div>
                     
                     <!-- Welcome / Breadcrumb Area -->
                     <div class="hidden md:flex flex-col items-start justify-center">

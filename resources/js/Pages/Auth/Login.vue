@@ -1,7 +1,8 @@
 <script setup>
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import InputError from '@/Components/InputError.vue';
-import { ref } from 'vue';
+import ApplicationLogo from '@/Components/ApplicationLogo.vue';
+import { ref, onMounted } from 'vue';
 
 defineProps({
     canResetPassword: {
@@ -21,6 +22,24 @@ const form = useForm({
 });
 
 const isPasswordVisible = ref(false);
+const isDark = ref(false);
+
+onMounted(() => {
+    isDark.value = document.documentElement.classList.contains('dark') || 
+                   localStorage.getItem('theme') === 'dark' || 
+                   (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+});
+
+const toggleTheme = () => {
+    isDark.value = !isDark.value;
+    if (isDark.value) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+    }
+};
 
 const submit = () => {
     form.post(route('login'), {
@@ -42,16 +61,8 @@ const submit = () => {
 
             <!-- Top Header Badge -->
             <div class="relative z-10">
-                <div class="inline-flex items-center gap-3 bg-white/[0.07] backdrop-blur-xl px-4 py-2.5 rounded-2xl border border-white/10 shadow-sm">
-                    <img src="/Logo del CAM.png" alt="Logo CAM #48" class="h-8 w-auto object-contain drop-shadow">
-                    <div class="flex flex-col text-left">
-                        <span class="font-display font-black text-sm tracking-tight text-white leading-tight">
-                            Family<span class="text-sky-400">Lock</span>
-                        </span>
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-tight">
-                            CAM #48 &bull; Nanchital
-                        </span>
-                    </div>
+                <div class="inline-flex items-center bg-white/[0.08] backdrop-blur-xl px-5 py-3 rounded-2xl border border-white/10 shadow-sm">
+                    <ApplicationLogo variant="horizontal" force-theme="dark" size="h-12 lg:h-14" alt="CAM Tonalpouhqui #48" />
                 </div>
             </div>
 
@@ -104,28 +115,37 @@ const submit = () => {
             </div>
         </div>
 
+        <!-- Floating Theme Toggle (Apple Glass Style) -->
+        <button 
+            @click="toggleTheme" 
+            type="button"
+            class="fixed top-5 right-5 z-30 w-10 h-10 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border border-slate-200/60 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-primary transition-all flex items-center justify-center active:scale-95 shadow-sm"
+            :title="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+            :aria-label="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+        >
+            <i v-if="!isDark" class="fas fa-moon text-sm"></i>
+            <i v-else class="fas fa-sun text-sm text-amber-400"></i>
+        </button>
+
         <!-- Right Side: Login Form -->
-        <div class="w-full md:w-7/12 lg:w-1/2 flex items-center justify-center p-6 sm:p-12 lg:p-20 relative">
+        <div class="w-full md:w-7/12 lg:w-1/2 flex items-center justify-center p-6 sm:p-8 lg:p-12 xl:p-16 relative">
             <div class="w-full max-w-md">
                 
-                <!-- Mobile Branding -->
-                <div class="md:hidden flex flex-col items-center mb-8 text-center">
-                    <div class="w-16 h-16 bg-white dark:bg-slate-800 rounded-3xl shadow-sm flex items-center justify-center border border-slate-200/80 dark:border-white/10 mb-3">
-                        <img src="/Logo del CAM.png" alt="Logo CAM #48" class="h-10 w-auto object-contain">
+                <!-- Institutional Header with Full Logo (Modo Claro: logo-claro.svg / Modo Oscuro: logo-oscuro.svg) -->
+                <div class="mb-5 flex flex-col items-center text-center">
+                    <div class="mb-3 flex justify-center w-full">
+                        <ApplicationLogo
+                            variant="completo"
+                            size="h-36 sm:h-40 md:h-44 lg:h-48"
+                            alt="Centro de Atención Múltiple Tonalpouhqui #48"
+                            class="transition-transform duration-300 hover:scale-[1.02]"
+                        />
                     </div>
-                    <h2 class="font-display font-black text-xl text-slate-900 dark:text-white">
-                        Family<span class="text-primary">Lock</span>
-                    </h2>
-                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">CAM #48 &bull; Panel de Control</p>
-                </div>
-
-                <!-- Form Header -->
-                <div class="mb-8">
                     <h2 class="font-display font-black text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight">
                         Iniciar Sesión
                     </h2>
-                    <p class="text-slate-500 dark:text-slate-400 text-sm mt-1.5 font-normal">
-                        Ingresa tus credenciales autorizadas para acceder a la administración.
+                    <p class="text-slate-500 dark:text-slate-400 text-sm mt-1.5 font-normal max-w-sm">
+                        Ingresa tus credenciales autorizadas para acceder a la administración de FamilyLock.
                     </p>
                 </div>
 
@@ -135,7 +155,7 @@ const submit = () => {
                     <span>{{ status }}</span>
                 </div>
 
-                <form @submit.prevent="submit" class="space-y-5">
+                <form @submit.prevent="submit" class="space-y-4">
                     <!-- Email Input -->
                     <div>
                         <label for="email" class="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-2">
@@ -227,7 +247,7 @@ const submit = () => {
                 </form>
 
                 <!-- Institutional Footer Badge -->
-                <div class="mt-10 pt-6 border-t border-slate-200/60 dark:border-slate-800/80 text-center">
+                <div class="mt-6 pt-5 border-t border-slate-200/60 dark:border-slate-800/80 text-center">
                     <p class="text-xs text-slate-400 dark:text-slate-500 font-medium">
                         Sistema Administrativo Escolar &bull; Versión 2.0
                     </p>

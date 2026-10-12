@@ -1,7 +1,7 @@
 {
-    "name": "Sistema CAM #48",
-    "short_name": "CAM48",
-    "description": "Sistema Escolar del Centro de Atención Múltiple #48",
+    "name": "FamilyLock — CAM #48 Tonalpouhqui",
+    "short_name": "FamilyLock",
+    "description": "Sistema de Control Escolar y Asistencia del Centro de Atención Múltiple Tonalpouhqui #48",
     "start_url": "/dashboard",
     "display": "standalone",
     "background_color": "#ffffff",
@@ -10,17 +10,17 @@
     "icons": [
         {
             "src": "/favicon.ico",
-            "sizes": "64x64 32x32 24x24 16x16",
+            "sizes": "64x64 48x48 32x32 16x16",
             "type": "image/x-icon"
         },
         {
-            "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Laravel.svg/200px-Laravel.svg.png",
+            "src": "/icono-192.png",
             "sizes": "192x192",
             "type": "image/png",
             "purpose": "any maskable"
         },
         {
-            "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Laravel.svg/512px-Laravel.svg.png",
+            "src": "/icono-512.png",
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "any maskable"

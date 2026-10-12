@@ -1,0 +1,59 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="820" height="1035" viewBox="130 50 820 1035" role="img" aria-labelledby="title desc">
+<title id="title">CAM Tonalpouhqui — Centro de Atención Múltiple</title><desc id="desc">Logotipo inclusivo con cuatro niñas y niños, silla de ruedas, libro abierto y símbolo de apoyo.</desc>
+<defs><path id="top-curve" d="M118 515 A422 422 0 0 1 962 515"/></defs>
+<text fill="#102944" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="43" letter-spacing="1.0"><textPath href="#top-curve" xlink:href="#top-curve" text-anchor="middle" startOffset="50%">CENTRO DE ATENCIÓN MÚLTIPLE</textPath></text>
+<circle cx="540" cy="525" r="328" fill="white" stroke="#102944" stroke-width="20"/>
+<circle cx="540" cy="525" r="304" fill="none" stroke="#02A9DF" stroke-width="5" opacity=".98"/>
+
+<g id="comunidad-inclusiva">
+  <!-- Niña con lentes -->
+  <path d="M277 342 C267 321 259 321 246 328 C236 336 247 355 233 370 C247 377 270 365 279 349 Z" fill="#FFCE20"/>
+  <circle cx="305" cy="370" r="38" fill="#FFCE20"/>
+  <path d="M279 365 a15 15 0 1 0 30 0 a15 15 0 1 0 -30 0 M310 365 a15 15 0 1 0 30 0 a15 15 0 1 0 -30 0" stroke="white" stroke-width="4.7" fill="none"/>
+  <path d="M308 365 h2" stroke="white" stroke-width="5"/>
+  <path d="M294 386 Q306 397 318 385" stroke="white" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <path d="M298 431 Q269 436 240 407 M316 430 Q347 437 368 413" stroke="#FFCE20" stroke-width="18" stroke-linecap="round" fill="none"/>
+  <path d="M294 421 Q307 417 318 423 L342 532 Q306 545 270 533 Z" fill="#FFCE20"/>
+  <path d="M293 531 L282 554 M321 531 L332 554" stroke="#FFCE20" stroke-width="15" stroke-linecap="round"/>
+  <!-- Niño usuario de silla de ruedas -->
+  <circle cx="467" cy="335" r="41" fill="#02A9DF"/>
+  <path d="M448 349 Q466 363 484 347" stroke="white" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M458 393 Q436 419 417 407 M475 393 Q504 413 528 395" stroke="#02A9DF" stroke-width="18" fill="none" stroke-linecap="round"/>
+  <path d="M457 386 Q474 389 485 408 L488 487 L519 498" stroke="#02A9DF" stroke-width="21" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="461" cy="543" r="42" stroke="#02A9DF" stroke-width="12" fill="none"/>
+  <circle cx="461" cy="543" r="8" fill="#02A9DF"/>
+  <path d="M485 491 H539 L552 539 H575" stroke="#02A9DF" stroke-width="12" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+  <!-- Niña con coletas -->
+  <path d="M596 349 C575 317 560 329 559 353 Q578 333 596 360 M643 350 C665 316 680 327 682 354 Q663 335 641 359" fill="#A3479C"/>
+  <circle cx="620" cy="377" r="38" fill="#A3479C"/>
+  <path d="M608 389 Q620 400 631 387" stroke="white" stroke-width="6.5" stroke-linecap="round" fill="none"/>
+  <circle cx="601" cy="350" r="2.4" fill="white"/><circle cx="612" cy="346" r="2.4" fill="white"/><circle cx="624" cy="345" r="2.4" fill="white"/><circle cx="636" cy="350" r="2.4" fill="white"/>
+  <path d="M611 431 Q587 442 564 421 M631 431 Q654 445 677 420" stroke="#A3479C" stroke-width="18" stroke-linecap="round" fill="none"/>
+  <path d="M607 423 L632 423 L663 532 Q621 549 580 532 Z" fill="#A3479C"/>
+  <path d="M602 532 L591 550 M639 532 L650 550" stroke="#A3479C" stroke-width="16" stroke-linecap="round"/>
+  <!-- Niño con auxiliar auditivo -->
+  <circle cx="766" cy="379" r="37" fill="#EF3440"/>
+  <path d="M776 396 Q789 405 801 389" stroke="white" stroke-width="6.5" fill="none" stroke-linecap="round"/>
+  <path d="M738 365 Q729 371 734 385 Q738 391 734 398" fill="none" stroke="white" stroke-width="4.8" stroke-linecap="round"/>
+  <circle cx="736" cy="377" r="3.4" fill="white"/>
+  <path d="M747 432 Q722 443 704 418 M778 434 Q798 447 822 414" stroke="#EF3440" stroke-width="18" fill="none" stroke-linecap="round"/>
+  <path d="M753 422 Q767 415 782 424 L790 513 L782 565 L754 525 L728 566 L736 487 Z" fill="#EF3440"/>
+</g>
+<g id="libro-conocimiento">
+  <path d="M287 621 Q398 597 536 647 Q674 597 791 621 L773 687 Q664 668 536 713 Q408 668 305 687 Z" fill="#102944"/>
+  <path d="M311 622 Q418 605 527 655 L527 690 Q413 650 320 666 Z" fill="#ffffff"/>
+  <path d="M545 655 Q653 605 767 622 L757 666 Q658 650 545 690 Z" fill="#ffffff"/>
+  <path d="M536 648 V709" stroke="#02A9DF" stroke-width="8" stroke-linecap="round"/>
+  <path d="M322 642 Q417 634 506 667 M564 669 Q658 633 751 642" stroke="#02A9DF" stroke-width="5" fill="none" opacity=".85"/>
+</g><g id="apoyo-y-cuidado" fill="none" stroke="#102944" stroke-linecap="round" stroke-linejoin="round">
+<path d="M295 715 Q341 752 425 749 Q471 753 493 771 Q518 790 569 772 Q647 734 777 721" stroke-width="24"/>
+<path d="M347 761 Q428 800 509 798 Q575 802 642 761" stroke-width="13" opacity=".85"/>
+</g>
+<text x="540" y="831" fill="#102944" font-size="48" font-weight="900" text-anchor="middle" letter-spacing="8" font-family="Arial,Helvetica,sans-serif">CAM</text>
+<path d="M216 894 H288 M792 894 H864" stroke="#02A9DF" stroke-width="5" stroke-linecap="round"/>
+<text x="540" y="906" fill="#102944" font-size="31" font-weight="800" text-anchor="middle" letter-spacing="3.2" font-family="Arial,Helvetica,sans-serif">EDUCACIÓN ESPECIAL</text>
+<rect x="143" y="942" rx="19" width="794" height="101" fill="#102944"/>
+<text x="540" y="1012" fill="white" font-size="59" font-weight="900" text-anchor="middle" letter-spacing="5.0" font-family="Arial,Helvetica,sans-serif">TONALPOUHQUI</text>
+<path d="M432 1072 H648" stroke="#02A9DF" stroke-width="7" stroke-linecap="round"/>
+</svg>
