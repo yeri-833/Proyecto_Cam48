@@ -2,12 +2,9 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
-use Tests\TestCase;
 use App\Models\Alumno;
 use App\Models\User;
-use Carbon\Carbon;
+use Tests\TestCase;
 
 class EscaneoSeguridadTest extends TestCase
 {
@@ -18,20 +15,20 @@ class EscaneoSeguridadTest extends TestCase
     {
         $qrDataInvalido = json_encode([
             'id' => '12345',
-            'rol' => 'Alumno'
+            'rol' => 'Alumno',
         ]);
 
-        $user = User::first() ?? User::factory()->create();
+        $user = User::first() ?? User::factory()->create(['role' => 'operador']);
 
         $response = $this->actingAs($user)->postJson('/escaner/procesar', [
-            'qr_data' => $qrDataInvalido
+            'qr_data' => $qrDataInvalido,
         ]);
 
         $response->assertStatus(200)
-                 ->assertJson([
-                     'status' => 'error',
-                     'msg' => 'Código QR inválido o falsificado (Firma incorrecta)'
-                 ]);
+            ->assertJson([
+                'status' => 'error',
+                'msg' => 'Código QR inválido o falsificado (Firma incorrecta)',
+            ]);
     }
 
     /**
@@ -42,19 +39,19 @@ class EscaneoSeguridadTest extends TestCase
         $qrDataInvalido = json_encode([
             'id' => '12345',
             'rol' => 'Alumno',
-            'signature' => 'firmafalsainventada123'
+            'signature' => 'firmafalsainventada123',
         ]);
 
-        $user = User::first() ?? User::factory()->create();
+        $user = User::first() ?? User::factory()->create(['role' => 'operador']);
         $response = $this->actingAs($user)->postJson('/escaner/procesar', [
-            'qr_data' => $qrDataInvalido
+            'qr_data' => $qrDataInvalido,
         ]);
 
         $response->assertStatus(200)
-                 ->assertJson([
-                     'status' => 'error',
-                     'msg' => 'Código QR inválido o falsificado (Firma incorrecta)'
-                 ]);
+            ->assertJson([
+                'status' => 'error',
+                'msg' => 'Código QR inválido o falsificado (Firma incorrecta)',
+            ]);
     }
 
     /**
@@ -62,22 +59,22 @@ class EscaneoSeguridadTest extends TestCase
      */
     public function test_acepta_qr_autentico(): void
     {
-        // Simulamos un ID de alumno que puede o no existir en BD para esta prueba 
+        // Simulamos un ID de alumno que puede o no existir en BD para esta prueba
         // Solo nos interesa la validación criptográfica inicial.
         $matricula = 'TEST001';
         $rol = 'Alumno';
-        
-        $firmaAutentica = hash_hmac('sha256', $matricula . $rol, config('app.key'));
+
+        $firmaAutentica = hash_hmac('sha256', $matricula.$rol, config('app.key'));
 
         $qrDataAutentico = json_encode([
             'id' => $matricula,
             'rol' => $rol,
-            'signature' => $firmaAutentica
+            'signature' => $firmaAutentica,
         ]);
 
-        $user = User::first() ?? User::factory()->create();
+        $user = User::first() ?? User::factory()->create(['role' => 'operador']);
         $response = $this->actingAs($user)->postJson('/escaner/procesar', [
-            'qr_data' => $qrDataAutentico
+            'qr_data' => $qrDataAutentico,
         ]);
 
         $response->assertStatus(200);

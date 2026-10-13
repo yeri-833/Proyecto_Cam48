@@ -2,18 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\NotificarAsistenciaJob;
 use App\Models\Alumno;
 use App\Models\Personal;
-use App\Models\Tutor;
 use App\Models\RegistroAsistencia;
-use App\Services\WhatsAppService;
-use App\Services\TelegramService;
-use App\Jobs\NotificarAsistenciaJob;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use App\Models\Tutor;
 use Carbon\Carbon;
-use Inertia\Inertia;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Inertia\Inertia;
 
 class AsistenciaController extends Controller
 {
@@ -22,6 +22,8 @@ class AsistenciaController extends Controller
      */
     public function escaner()
     {
+        Gate::authorize('asistencia.escanear');
+
         return Inertia::render('Asistencia/Escaner');
     }
 
@@ -30,12 +32,14 @@ class AsistenciaController extends Controller
      */
     public function procesarQr(Request $request)
     {
+        Gate::authorize('asistencia.escanear');
+
         $qrData = $request->input('qr_data');
 
         if (empty($qrData)) {
             return response()->json([
                 'status' => 'error',
-                'msg' => 'Código QR ilegible o vacío'
+                'msg' => 'Código QR ilegible o vacío',
             ]);
         }
 
@@ -55,7 +59,7 @@ class AsistenciaController extends Controller
                 // Caso B: Texto plano (Ya no se permite bajo el nuevo esquema de seguridad estricto)
                 return response()->json([
                     'status' => 'error',
-                    'msg' => 'Formato de QR no soportado o obsoleto. Por favor, genere una nueva credencial.'
+                    'msg' => 'Formato de QR no soportado o obsoleto. Por favor, genere una nueva credencial.',
                 ]);
             }
         } elseif (is_array($qrData)) {
@@ -67,17 +71,17 @@ class AsistenciaController extends Controller
         if (empty($idPersona)) {
             return response()->json([
                 'status' => 'error',
-                'msg' => 'ID no válido en el código QR'
+                'msg' => 'ID no válido en el código QR',
             ]);
         }
 
         // Validación de Firma HMAC Anti-clonación
-        $expectedSignature = hash_hmac('sha256', $idPersona . $rol, config('app.key'));
-        
-        if (empty($signature) || !hash_equals($expectedSignature, $signature)) {
+        $expectedSignature = hash_hmac('sha256', $idPersona.$rol, config('app.key'));
+
+        if (empty($signature) || ! hash_equals($expectedSignature, $signature)) {
             return response()->json([
                 'status' => 'error',
-                'msg' => 'Código QR inválido o falsificado (Firma incorrecta)'
+                'msg' => 'Código QR inválido o falsificado (Firma incorrecta)',
             ]);
         }
 
@@ -91,10 +95,10 @@ class AsistenciaController extends Controller
             if ($rol === 'Alumno') {
                 $alumno = Alumno::where('matricula', $idPersona)->first();
                 if ($alumno) {
-                    if (!$alumno->activo) {
+                    if (! $alumno->activo) {
                         return response()->json([
                             'status' => 'error',
-                            'msg' => 'El alumno está inactivo o de baja'
+                            'msg' => 'El alumno está inactivo o de baja',
                         ]);
                     }
                     $nombreCompleto = $alumno->nombre_completo;
@@ -111,10 +115,10 @@ class AsistenciaController extends Controller
                 // Buscar exclusivamente en Personal por id numérico
                 $personal = is_numeric($idPersona) ? Personal::find((int) $idPersona) : Personal::where('id', $idPersona)->first();
                 if ($personal) {
-                    if (!$personal->activo) {
+                    if (! $personal->activo) {
                         return response()->json([
                             'status' => 'error',
-                            'msg' => 'El trabajador está inactivo o de baja'
+                            'msg' => 'El trabajador está inactivo o de baja',
                         ]);
                     }
                     $nombreCompleto = $personal->nombre_completo;
@@ -122,15 +126,16 @@ class AsistenciaController extends Controller
                 }
             }
 
-            if (empty($nombreCompleto) || empty($personaModel)) {
+            if ($personaModel === null || $nombreCompleto === '') {
                 return response()->json([
                     'status' => 'error',
                     'msg' => 'El código no existe en el sistema',
-                    'persona' => 'ID: ' . $idPersona
+                    'persona' => 'ID: '.$idPersona,
                 ]);
             }
 
             // Cooldown de 5 minutos para evitar duplicados accidentales
+            /** @var RegistroAsistencia|null $ultimoRegistro */
             $ultimoRegistro = $personaModel->asistencias()
                 ->whereDate('fecha', $fechaHoy)
                 ->latest('id')
@@ -138,28 +143,37 @@ class AsistenciaController extends Controller
 
             if ($ultimoRegistro) {
                 try {
-                    $ultimoTiempo = Carbon::parse($fechaHoy . ' ' . $ultimoRegistro->hora);
+                    $ultimoTiempo = Carbon::parse($fechaHoy.' '.$ultimoRegistro->hora);
 
                     if (abs(Carbon::now()->diffInSeconds($ultimoTiempo)) < 300) {
                         return response()->json([
                             'status' => 'warning',
                             'msg' => 'Pase registrado recientemente.',
-                            'persona' => $nombreCompleto
+                            'persona' => $nombreCompleto,
                         ]);
                     }
                 } catch (\Exception $exTime) {
-                    Log::warning('Error calculando cooldown de asistencia: ' . $exTime->getMessage());
+                    Log::warning('Error calculando cooldown de asistencia: '.$exTime->getMessage());
                 }
             }
 
-            // Registrar la asistencia polimórfica (y conservar id_persona y rol para transición segura)
-            $personaModel->asistencias()->create([
-                'id_persona' => (string) $idPersona,
-                'rol' => $rol,
+            // Registrar la asistencia polimórfica (y conservar campos heredados condicionalmente para compatibilidad)
+            $asistenciaData = [
                 'fecha' => $fechaHoy,
                 'hora' => $horaActual,
-                'modo_registro' => 'QR'
-            ]);
+            ];
+
+            if (Schema::hasColumn('registros_asistencia', 'modo_registro')) {
+                $asistenciaData['modo_registro'] = 'QR';
+            }
+            if (Schema::hasColumn('registros_asistencia', 'id_persona')) {
+                $asistenciaData['id_persona'] = (string) $idPersona;
+            }
+            if (Schema::hasColumn('registros_asistencia', 'rol')) {
+                $asistenciaData['rol'] = $rol;
+            }
+
+            $personaModel->asistencias()->create($asistenciaData);
 
             // =========== ALERTAS AUTOMÁTICAS (WHATSAPP + TELEGRAM) ===========
             if ($rol === 'Alumno' && isset($alumno) && $alumno->tutor) {
@@ -167,12 +181,12 @@ class AsistenciaController extends Controller
                 $tipoPase = Carbon::now()->hour < 13 ? 'ENTRADA' : 'SALIDA';
 
                 NotificarAsistenciaJob::dispatch(
-                    $alumno, 
-                    $tipoPase, 
-                    $horaFormateada, 
+                    $alumno,
+                    $tipoPase,
+                    $horaFormateada,
                     $nombreCompleto
                 );
-                
+
                 $msgResponse = 'Asistencia registrada y avisos enviados';
             } else {
                 $msgResponse = 'Asistencia registrada';
@@ -183,14 +197,15 @@ class AsistenciaController extends Controller
                 'status' => 'success',
                 'msg' => $msgResponse,
                 'persona' => $nombreCompleto,
-                'hora' => Carbon::now()->format('h:i A')
+                'hora' => Carbon::now()->format('h:i A'),
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error en procesarQr: ' . $e->getMessage(), ['id' => $idPersona ?? 'N/A']);
+            Log::error('Error en procesarQr: '.$e->getMessage(), ['id' => (string) $idPersona]);
+
             return response()->json([
                 'status' => 'error',
-                'msg' => 'Ocurrió un error inesperado. Intenta de nuevo.'
+                'msg' => 'Ocurrió un error inesperado. Intenta de nuevo.',
             ]);
         }
     }
@@ -200,12 +215,14 @@ class AsistenciaController extends Controller
      */
     public function desbloquearKiosco(Request $request)
     {
+        Gate::authorize('asistencia.escanear');
+
         $password = $request->input('password');
 
         if (empty($password)) {
             return response()->json([
                 'status' => 'error',
-                'msg' => 'Contraseña vacía'
+                'msg' => 'Contraseña vacía',
             ]);
         }
 
@@ -213,13 +230,13 @@ class AsistenciaController extends Controller
 
         if ($user && Hash::check($password, $user->password)) {
             return response()->json([
-                'status' => 'success'
+                'status' => 'success',
             ]);
         }
 
         return response()->json([
             'status' => 'error',
-            'msg' => 'Contraseña incorrecta'
+            'msg' => 'Contraseña incorrecta',
         ]);
     }
 }

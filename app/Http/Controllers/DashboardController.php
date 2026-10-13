@@ -22,9 +22,9 @@ class DashboardController extends Controller
             ->count('asistible_id');
 
         $stats = [
-            'totalAlumnos'   => $totalAlumnos,
+            'totalAlumnos' => $totalAlumnos,
             'asistenciasHoy' => $asistenciasHoy,
-            'pendientes'     => max(0, $totalAlumnos - $asistenciasHoy),
+            'pendientes' => max(0, $totalAlumnos - $asistenciasHoy),
         ];
 
         // Tabla de expedientes paginada — columnas reales de la tabla 'alumnos'
@@ -33,17 +33,17 @@ class DashboardController extends Controller
             ->orderBy('apellido')
             ->paginate(15)
             ->through(fn ($a) => [
-                'matricula'       => $a->matricula,
-                'nombre'          => $a->nombre,
-                'apellido'        => $a->apellido,
-                'nombre_completo' => trim($a->nombre . ' ' . $a->apellido),
-                'sexo'            => $a->sexo,
+                'matricula' => $a->matricula,
+                'nombre' => $a->nombre,
+                'apellido' => $a->apellido,
+                'nombre_completo' => trim($a->nombre.' '.$a->apellido),
+                'sexo' => $a->sexo,
                 'nivel_educativo' => $a->nivel_educativo,
-                'grado'           => $a->grado,
-                'grupo'           => $a->grupo,
-                'discapacidad'    => $a->discapacidad,
-                'foto_perfil'     => null,  // columna no existe en tu BD
-                'tutor'           => $a->tutor?->t1_nombre ?? 'Sin asignar',
+                'grado' => $a->grado,
+                'grupo' => $a->grupo,
+                'discapacidad' => $a->discapacidad,
+                'foto_perfil' => null,  // columna no existe en tu BD
+                'tutor' => optional($a->tutor)->t1_nombre ?? 'Sin asignar',
             ]);
 
         // Evento próximo
@@ -52,10 +52,9 @@ class DashboardController extends Controller
             ->first();
 
         return Inertia::render('Dashboard', [
-            'stats'         => $stats,
-            'alumnos'       => $alumnos,
+            'stats' => $stats,
+            'alumnos' => $alumnos,
             'proximoEvento' => $proximoEvento,
         ]);
     }
 }
-

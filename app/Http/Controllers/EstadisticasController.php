@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Alumno;
-use App\Models\Tutor;
+use App\Models\Personal;
 use App\Models\RegistroAsistencia;
-use Illuminate\Support\Facades\DB;
+use App\Models\Tutor;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 
 class EstadisticasController extends Controller
@@ -17,6 +19,8 @@ class EstadisticasController extends Controller
      */
     public function index()
     {
+        Gate::authorize('estadisticas.consultar');
+
         // ─────────────────────────────────────────────────────────
         // 1. KPIs Generales
         // ─────────────────────────────────────────────────────────
@@ -24,10 +28,10 @@ class EstadisticasController extends Controller
 
         $totalAlumnos = Alumno::where('activo', 1)->count();
 
-        $asistenciasHoy = RegistroAsistencia::where('asistible_type', \App\Models\Alumno::class)
-                            ->whereDate('fecha', Carbon::today())
-                            ->distinct('asistible_id')
-                            ->count('asistible_id');
+        $asistenciasHoy = RegistroAsistencia::where('asistible_type', Alumno::class)
+            ->whereDate('fecha', Carbon::today())
+            ->distinct('asistible_id')
+            ->count('asistible_id');
 
         $promedioHoy = ($totalAlumnos > 0) ? round(($asistenciasHoy / $totalAlumnos) * 100) : 0;
 
@@ -42,8 +46,8 @@ class EstadisticasController extends Controller
             ->orderBy('fecha', 'desc')
             ->limit(7)
             ->get()
-            ->map(fn($item) => [
-                'dia'   => Carbon::parse($item->fecha)->format('d/m'),
+            ->map(fn ($item) => [
+                'dia' => Carbon::parse($item->fecha)->format('d/m'),
                 'total' => (int) $item->total,
             ])
             ->reverse()
@@ -54,21 +58,21 @@ class EstadisticasController extends Controller
         //    Mapeamos asistible_type → etiqueta amigable
         // ─────────────────────────────────────────────────────────
         $typeMap = [
-            \App\Models\Alumno::class   => 'Alumnos',
-            \App\Models\Tutor::class    => 'Tutores',
-            \App\Models\Personal::class => 'Personal',
+            Alumno::class => 'Alumnos',
+            Tutor::class => 'Tutores',
+            Personal::class => 'Personal',
         ];
 
         $participacionRoles = RegistroAsistencia::select('asistible_type', DB::raw('COUNT(*) as total'))
             ->groupBy('asistible_type')
             ->get()
-            ->map(fn($item) => [
-                'tipo'  => $typeMap[$item->asistible_type] ?? 'Otro',
+            ->map(fn ($item) => [
+                'tipo' => $typeMap[$item->asistible_type] ?? 'Otro',
                 'total' => (int) $item->total,
             ])
             ->groupBy('tipo')
-            ->map(fn($group, $key) => [
-                'tipo'  => $key,
+            ->map(fn ($group, $key) => [
+                'tipo' => $key,
                 'total' => $group->sum('total'),
             ])
             ->values();
@@ -76,7 +80,7 @@ class EstadisticasController extends Controller
         // ─────────────────────────────────────────────────────────
         // 4. Ranking de Tutores más comprometidos (Top 20)
         // ─────────────────────────────────────────────────────────
-        $topTutoresRaw = RegistroAsistencia::where('asistible_type', \App\Models\Tutor::class)
+        $topTutoresRaw = RegistroAsistencia::where('asistible_type', Tutor::class)
             ->select('asistible_id', DB::raw('COUNT(*) as asistencias'))
             ->groupBy('asistible_id')
             ->orderByDesc('asistencias')
@@ -91,25 +95,25 @@ class EstadisticasController extends Controller
 
             if ($tutor) {
                 $rankingTutores[] = [
-                    'nombre_tutor'    => strtoupper(trim($tutor->t1_nombre)),
-                    'telefono'        => $tutor->t1_telefono,
-                    'nombre_alumno'   => $tutor->alumno
+                    'nombre_tutor' => strtoupper(trim($tutor->t1_nombre)),
+                    'telefono' => $tutor->t1_telefono,
+                    'nombre_alumno' => $tutor->alumno
                                           ? strtoupper($tutor->alumno->nombre_completo)
                                           : 'Sin alumno',
-                    'matricula_alumno'=> $tutor->matricula_alumno,
-                    'asistencias'     => (int) $registro->asistencias,
+                    'matricula_alumno' => $tutor->matricula_alumno,
+                    'asistencias' => (int) $registro->asistencias,
                 ];
             }
         }
 
         return Inertia::render('Estadisticas/Index', [
             'kpis' => [
-                'diasActivos'          => $diasConAsistencia,
-                'promedioAsistenciaHoy'=> $promedioHoy,
-                'tutoresInactivos'     => $tutoresInactivos,
+                'diasActivos' => $diasConAsistencia,
+                'promedioAsistenciaHoy' => $promedioHoy,
+                'tutoresInactivos' => $tutoresInactivos,
             ],
-            'graficaDias'    => $asistenciasDias,
-            'graficaRoles'   => $participacionRoles,
+            'graficaDias' => $asistenciasDias,
+            'graficaRoles' => $participacionRoles,
             'rankingTutores' => $rankingTutores,
         ]);
     }

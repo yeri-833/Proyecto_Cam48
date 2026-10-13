@@ -2,34 +2,40 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\InvitacionTelegramMail;
 use App\Models\Personal;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
-use Inertia\Inertia;
-use Intervention\Image\ImageManager;
-use Intervention\Image\Drivers\Gd\Driver;
-
 use App\Services\TelegramService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
+use Intervention\Image\Drivers\Gd\Driver;
+use Intervention\Image\Encoders\JpegEncoder;
+use Intervention\Image\ImageManager;
 
 class PersonalController extends Controller
 {
-    public function __construct(private TelegramService $telegramService)
-    {
-    }
+    public function __construct(private TelegramService $telegramService) {}
+
     public function index()
     {
+        Gate::authorize('personal.consultar');
+
         $personal = Personal::where('activo', 1)
             ->orderBy('nombre_completo')
             ->paginate(15);
 
         return Inertia::render('Personal/Index', [
-            'personal' => $personal
+            'personal' => $personal,
         ]);
     }
 
     public function store(Request $request)
     {
+        Gate::authorize('personal.crear');
+
         $validated = $request->validate([
             'id' => 'required|string|unique:personal,id',
             'nombre_completo' => 'required|string|max:255',
@@ -52,14 +58,14 @@ class PersonalController extends Controller
         $validated['activo'] = 1;
 
         if ($request->hasFile('foto_perfil')) {
-            $manager = new ImageManager(new Driver());
-            $image = $manager->read($request->file('foto_perfil')->getRealPath());
+            $manager = new ImageManager(new Driver);
+            $image = $manager->decodePath($request->file('foto_perfil')->getRealPath());
             $image->scaleDown(width: 800);
-            $encoded = $image->toJpeg(quality: 80);
-            
-            $filename = 'fotos/personal/' . uniqid() . '.jpg';
+            $encoded = $image->encode(new JpegEncoder(quality: 80));
+
+            $filename = 'fotos/personal/'.uniqid().'.jpg';
             Storage::disk('public')->put($filename, $encoded->toString());
-            
+
             $validated['foto_perfil'] = $filename;
         }
 
@@ -70,6 +76,8 @@ class PersonalController extends Controller
 
     public function update(Request $request, $id)
     {
+        Gate::authorize('personal.actualizar');
+
         $validated = $request->validate([
             'nombre_completo' => 'required|string|max:255',
             'email' => 'nullable|email|max:255',
@@ -87,20 +95,20 @@ class PersonalController extends Controller
         ]);
 
         $personal = Personal::findOrFail($id);
-        
+
         if ($request->hasFile('foto_perfil')) {
             if ($personal->foto_perfil && Storage::disk('public')->exists($personal->foto_perfil)) {
                 Storage::disk('public')->delete($personal->foto_perfil);
             }
-            
-            $manager = new ImageManager(new Driver());
-            $image = $manager->read($request->file('foto_perfil')->getRealPath());
+
+            $manager = new ImageManager(new Driver);
+            $image = $manager->decodePath($request->file('foto_perfil')->getRealPath());
             $image->scaleDown(width: 800);
-            $encoded = $image->toJpeg(quality: 80);
-            
-            $filename = 'fotos/personal/' . uniqid() . '.jpg';
+            $encoded = $image->encode(new JpegEncoder(quality: 80));
+
+            $filename = 'fotos/personal/'.uniqid().'.jpg';
             Storage::disk('public')->put($filename, $encoded->toString());
-            
+
             $validated['foto_perfil'] = $filename;
         }
 
@@ -111,7 +119,7 @@ class PersonalController extends Controller
 
     public function destroy($id)
     {
-        \Illuminate\Support\Facades\Gate::authorize('eliminar-registros');
+        Gate::authorize('eliminar-registros');
 
         $personal = Personal::findOrFail($id);
         $personal->update(['activo' => 0]); // Borrado lógico
@@ -122,14 +130,14 @@ class PersonalController extends Controller
     public function enviarMensaje(Request $request, $id)
     {
         $validated = $request->validate([
-            'mensaje' => 'required|string|max:1000'
+            'mensaje' => 'required|string|max:1000',
         ]);
 
         $personal = Personal::findOrFail($id);
 
         if (empty($personal->telegram_chat_id)) {
             return redirect()->back()->withErrors([
-                'mensaje' => 'Este docente no tiene un Chat ID de Telegram registrado.'
+                'mensaje' => 'Este docente no tiene un Chat ID de Telegram registrado.',
             ]);
         }
 
@@ -143,7 +151,7 @@ class PersonalController extends Controller
             return redirect()->back()->with('success', 'Mensaje enviado exitosamente por Telegram al docente.');
         } else {
             return redirect()->back()->withErrors([
-                'mensaje' => 'Hubo un error al intentar enviar el mensaje.'
+                'mensaje' => 'Hubo un error al intentar enviar el mensaje.',
             ]);
         }
     }
@@ -151,7 +159,7 @@ class PersonalController extends Controller
     public function enviarMensajeMasivo(Request $request)
     {
         $validated = $request->validate([
-            'mensaje' => 'required|string|max:1000'
+            'mensaje' => 'required|string|max:1000',
         ]);
 
         $personalConTelegram = Personal::whereNotNull('telegram_chat_id')->where('activo', 1)->get();
@@ -161,9 +169,11 @@ class PersonalController extends Controller
             $exito = $this->telegramService->enviarMensajeDirecto(
                 $p->telegram_chat_id,
                 $p->nombre_completo,
-                "📢 *Aviso Institucional (Personal)*\n\n" . $validated['mensaje']
+                "📢 *Aviso Institucional (Personal)*\n\n".$validated['mensaje']
             );
-            if ($exito) $enviados++;
+            if ($exito) {
+                $enviados++;
+            }
         }
 
         return redirect()->back()->with('success', "Aviso masivo enviado a {$enviados} docentes vinculados.");
@@ -172,27 +182,28 @@ class PersonalController extends Controller
     public function enviarInvitacionTelegram($id)
     {
         $personal = Personal::findOrFail($id);
-        
+
         $botUsername = config('telegram.bot_username');
-        $codigoMagico = 'personal_' . $personal->id;
+        $codigoMagico = 'personal_'.$personal->id;
         $enlaceMagico = "https://t.me/{$botUsername}?start={$codigoMagico}";
 
-        if (!empty($personal->email)) {
+        if (! empty($personal->email)) {
             try {
                 // Usaremos un MailGenérico o adaptaremos el de Tutor
                 // Para simplificar, le enviaremos el de Tutor simulando la estructura
-                $dummyTutor = (object) ['t1_nombre' => 'Profesor(a) ' . $personal->nombre_completo];
-                \Illuminate\Support\Facades\Mail::to($personal->email)->send(new \App\Mail\InvitacionTelegramMail($dummyTutor, $enlaceMagico));
-                
+                $dummyTutor = (object) ['t1_nombre' => 'Profesor(a) '.$personal->nombre_completo];
+                Mail::to($personal->email)->send(new InvitacionTelegramMail($dummyTutor, $enlaceMagico));
+
                 return redirect()->back()->with('success', 'Invitación enviada por correo electrónico al docente exitosamente.');
             } catch (\Exception $e) {
-                Log::error('Error enviando invitación Telegram a personal: ' . $e->getMessage(), ['id' => $id]);
+                Log::error('Error enviando invitación Telegram a personal: '.$e->getMessage(), ['id' => $id]);
+
                 return redirect()->back()->withErrors([
-                    'mensaje' => 'No se pudo enviar el correo. Puedes enviarle este enlace de forma manual: ' . $enlaceMagico
+                    'mensaje' => 'No se pudo enviar el correo. Puedes enviarle este enlace de forma manual: '.$enlaceMagico,
                 ]);
             }
         }
 
-        return redirect()->back()->with('success', 'Comparte este enlace con el profesor por WhatsApp para vincular su cuenta: ' . $enlaceMagico);
+        return redirect()->back()->with('success', 'Comparte este enlace con el profesor por WhatsApp para vincular su cuenta: '.$enlaceMagico);
     }
 }

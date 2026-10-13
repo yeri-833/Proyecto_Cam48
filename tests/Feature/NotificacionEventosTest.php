@@ -2,13 +2,11 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
+use App\Jobs\NotificarEventoTutorJob;
+use App\Models\Tutor;
+use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
-use App\Models\User;
-use App\Models\Tutor;
-use App\Jobs\NotificarEventoTutorJob;
 
 class NotificacionEventosTest extends TestCase
 {
@@ -20,7 +18,7 @@ class NotificacionEventosTest extends TestCase
         // Engañamos al sistema para que no envíe nada de verdad y solo capture los Jobs
         Queue::fake();
 
-        $user = User::first() ?? User::factory()->create();
+        $user = User::first() ?? User::factory()->create(['role' => 'docente']);
 
         // Ejecutar petición para crear un evento
         $response = $this->actingAs($user)->postJson('/eventos', [
@@ -28,7 +26,7 @@ class NotificacionEventosTest extends TestCase
             'fecha_hora' => date('Y-m-d\T10:00'),
             'ubicacion' => 'Auditorio',
             'descripcion' => 'Evento de prueba',
-            'avisar_whatsapp' => true // Esto desencadena el Job
+            'avisar_whatsapp' => true, // Esto desencadena el Job
         ]);
 
         $response->assertStatus(302);

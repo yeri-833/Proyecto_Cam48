@@ -1,0 +1,21 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+
+    paths:
+        - app
+
+    # Nivel de análisis (0=mínimo, 9=máximo). Nivel 5 es el estándar recomendado para Laravel.
+    level: 5
+
+    # Protección absoluta de MariaDB: desactiva escaneo de esquema y migraciones
+    disableMigrationScan: true
+    disableSchemaScan: true
+
+    # Excluir vendor y archivos generados del análisis
+    excludePaths:
+        - vendor/*
+        - storage/*
+        - bootstrap/cache/*
+        - public/*

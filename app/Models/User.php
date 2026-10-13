@@ -6,6 +6,23 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
+/**
+ * Modelo Eloquent para la tabla `usuarios`.
+ *
+ * @property int $id PK auto-incremental
+ * @property string $nombre_completo Nombre completo del usuario (columna real)
+ * @property string $correo Correo electrónico (columna real, alias de 'email')
+ * @property string $password Contraseña hasheada
+ * @property string|null $tipo_usuario Tipo/rol: 'Director', 'Docente', etc.
+ * @property string|null $telefono Teléfono de contacto
+ * @property string|null $remember_token Token de "remember me"
+ * @property string|null $email_verified_at Fecha de verificación de correo
+ * @property string|null $updated_at Última actualización
+ * @property string|null $fecha_registro Fecha de alta (CREATED_AT)
+ * @property-read string $email  Alias accessor de correo
+ * @property-read string $name   Alias accessor de nombre_completo
+ * @property-read string $role   Alias accessor de tipo_usuario
+ */
 class User extends Authenticatable
 {
     use HasFactory, Notifiable;
@@ -33,6 +50,9 @@ class User extends Authenticatable
         'remember_token',
         'email_verified_at',
         'updated_at',
+        'name',
+        'email',
+        'role',
     ];
 
     protected $hidden = [
@@ -45,7 +65,9 @@ class User extends Authenticatable
      * Usamos timestamps parciales.
      */
     public $timestamps = true;
+
     const CREATED_AT = 'fecha_registro';
+
     const UPDATED_AT = 'updated_at';
 
     /**
@@ -86,6 +108,41 @@ class User extends Authenticatable
     public function getRoleAttribute(): string
     {
         return $this->attributes['tipo_usuario'] ?? '';
+    }
+
+    public function setRoleAttribute(string $value): void
+    {
+        $this->attributes['tipo_usuario'] = $value;
+    }
+
+    /**
+     * Comprueba si el usuario tiene rol administrativo (Director, Administrador, Admin).
+     */
+    public function isAdmin(): bool
+    {
+        $role = strtolower($this->role);
+
+        return in_array($role, ['admin', 'administrador', 'director']);
+    }
+
+    /**
+     * Comprueba si el usuario es personal escolar autorizado (Docente, Personal o Admin).
+     */
+    public function isPersonal(): bool
+    {
+        $role = strtolower($this->role);
+
+        return $this->isAdmin() || in_array($role, ['docente', 'personal', 'profesor', 'maestro', 'administrativo']);
+    }
+
+    /**
+     * Comprueba si el usuario tiene permisos para operar el kiosco o escáner QR.
+     */
+    public function isKiosco(): bool
+    {
+        $role = strtolower($this->role);
+
+        return $this->isAdmin() || in_array($role, ['operador', 'kiosco', 'asistencia', 'prefectura']);
     }
 
     /**

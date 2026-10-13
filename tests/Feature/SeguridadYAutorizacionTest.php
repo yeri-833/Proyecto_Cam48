@@ -2,13 +2,12 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use App\Models\User;
 use App\Models\Alumno;
 use App\Models\ArchivoSistema;
 use App\Models\RegistroAsistencia;
+use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
 
 class SeguridadYAutorizacionTest extends TestCase
 {
@@ -77,26 +76,22 @@ class SeguridadYAutorizacionTest extends TestCase
     }
 
     /**
-     * El registro público no debe permitir escalamiento de privilegios inyectando role=admin.
+     * El registro público está deshabilitado; los intentos sin autenticación deben redirigir a login.
      */
-    public function test_registro_publico_ignora_rol_admin_inyectado(): void
+    public function test_registro_publico_esta_deshabilitado_y_redirige_a_login(): void
     {
-        $email = 'nuevo_usuario_' . time() . '@cam48.test';
+        $email = 'nuevo_usuario_'.time().'@cam48.test';
 
         $response = $this->post('/register', [
             'name' => 'Usuario Aspirante',
             'email' => $email,
             'password' => 'Password123!',
             'password_confirmation' => 'Password123!',
-            'role' => 'admin', // Intento malicioso de asignarse admin
+            'tipo_usuario' => 'Administrador', // Intento no autenticado
         ]);
 
-        $response->assertRedirect('/dashboard');
-
-        $user = User::where('email', $email)->first();
-        $this->assertNotNull($user);
-        // Debe ser docente por defecto, nunca admin
-        $this->assertEquals('docente', $user->role);
+        $response->assertRedirect('/login');
+        $this->assertDatabaseMissing('usuarios', ['correo' => $email]);
     }
 
     /**

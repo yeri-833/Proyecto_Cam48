@@ -2,13 +2,11 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use App\Models\User;
 use App\Models\Alumno;
-use App\Models\Tutor;
-use App\Models\Personal;
 use App\Models\RegistroAsistencia;
+use App\Models\User;
 use Carbon\Carbon;
+use Tests\TestCase;
 
 class AsistenciaFlujoCompletoTest extends TestCase
 {
@@ -22,7 +20,7 @@ class AsistenciaFlujoCompletoTest extends TestCase
      */
     public function test_registro_asistencia_alumno_exitoso_y_cooldown(): void
     {
-        $user = User::first() ?? User::factory()->create();
+        $user = User::first() ?? User::factory()->create(['role' => 'admin']);
 
         // Crear o buscar alumno de prueba
         $alumno = Alumno::firstOrCreate(
@@ -42,7 +40,7 @@ class AsistenciaFlujoCompletoTest extends TestCase
             ->delete();
 
         // 1. Primer escaneo auténtico
-        $sig = hash_hmac('sha256', $alumno->matricula . 'Alumno', config('app.key'));
+        $sig = hash_hmac('sha256', $alumno->matricula.'Alumno', config('app.key'));
         $qrData = json_encode([
             'id' => $alumno->matricula,
             'rol' => 'Alumno',
@@ -65,7 +63,7 @@ class AsistenciaFlujoCompletoTest extends TestCase
      */
     public function test_rechaza_alumno_inactivo(): void
     {
-        $user = User::first() ?? User::factory()->create();
+        $user = User::first() ?? User::factory()->create(['role' => 'admin']);
 
         $alumno = Alumno::firstOrCreate(
             ['matricula' => 'TEST_INACTIVO_01'],
@@ -79,7 +77,7 @@ class AsistenciaFlujoCompletoTest extends TestCase
         $alumno->activo = 0;
         $alumno->save();
 
-        $sig = hash_hmac('sha256', $alumno->matricula . 'Alumno', config('app.key'));
+        $sig = hash_hmac('sha256', $alumno->matricula.'Alumno', config('app.key'));
         $qrData = json_encode([
             'id' => $alumno->matricula,
             'rol' => 'Alumno',
@@ -97,7 +95,7 @@ class AsistenciaFlujoCompletoTest extends TestCase
      */
     public function test_vistas_historial_y_estadisticas_cargan_correctamente(): void
     {
-        $user = User::first() ?? User::factory()->create();
+        $user = User::first() ?? User::factory()->create(['role' => 'admin']);
 
         $resHistorial = $this->actingAs($user)->get('/historial');
         $resHistorial->assertStatus(200);

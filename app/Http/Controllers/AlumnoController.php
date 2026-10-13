@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Alumno;
 use App\Services\ImageUploadService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 
 class AlumnoController extends Controller
 {
     public function store(Request $request, ImageUploadService $imageService)
     {
+        Gate::authorize('alumnos.crear');
+
         $request->validate([
             'matricula' => 'required|string|unique:alumnos,matricula|max:20',
             'nombre' => 'required|string|max:100',
@@ -54,6 +57,8 @@ class AlumnoController extends Controller
 
     public function update(Request $request, $matricula, ImageUploadService $imageService)
     {
+        Gate::authorize('alumnos.actualizar');
+
         $request->validate([
             'nombre' => 'required|string|max:100',
             'apellido' => 'required|string|max:100',
@@ -71,7 +76,7 @@ class AlumnoController extends Controller
         ]);
 
         $alumno = Alumno::where('matricula', $matricula)->firstOrFail();
-        
+
         $data = [
             'nombre' => strtoupper($request->nombre),
             'apellido' => strtoupper($request->apellido),
@@ -90,14 +95,14 @@ class AlumnoController extends Controller
         }
 
         if ($request->has('activo')) {
-            $data['activo'] = (bool)$request->activo;
+            $data['activo'] = (bool) $request->activo;
         }
 
         if ($request->hasFile('foto_perfil')) {
             if ($alumno->foto_perfil && Storage::disk('public')->exists($alumno->foto_perfil)) {
                 Storage::disk('public')->delete($alumno->foto_perfil);
             }
-            
+
             $data['foto_perfil'] = $imageService->procesarYGuardar($request->file('foto_perfil'));
         }
 
