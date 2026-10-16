@@ -2,20 +2,23 @@
 
 namespace App\Services;
 
+use App\Models\Tutor;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class TelegramService
 {
     protected $botToken;
+
     protected $channelId;
+
     protected $modoSimulacion;
 
     public function __construct()
     {
         $this->botToken = config('telegram.bot_token', '');
         $this->channelId = config('telegram.channel_id', '');
-        
+
         // Si no hay token de bot, entramos en modo simulación (Mock)
         $this->modoSimulacion = empty($this->botToken);
     }
@@ -30,10 +33,10 @@ class TelegramService
         }
 
         $mensaje = "🏫 *CAM #48 - Control de Accesos*\n\n"
-                 . "Estimado tutor, le informamos que el alumno(a) *{$nombreAlumno}* ha registrado su asistencia.\n\n"
-                 . "⌚ *Hora:* {$hora}\n"
-                 . "📌 *Movimiento:* {$tipo}\n\n"
-                 . "_Mensaje automático institucional._";
+                 ."Estimado tutor, le informamos que el alumno(a) *{$nombreAlumno}* ha registrado su asistencia.\n\n"
+                 ."⌚ *Hora:* {$hora}\n"
+                 ."📌 *Movimiento:* {$tipo}\n\n"
+                 .'_Mensaje automático institucional._';
 
         return $this->enviarMensaje($chatId, $mensaje);
     }
@@ -44,19 +47,19 @@ class TelegramService
     public function enviarAvisoEvento($nombreEvento, $fecha, $ubicacion)
     {
         $mensaje = "📅 *CAM #48 - Nuevo Evento Escolar*\n\n"
-                 . "Se ha agendado una nueva actividad en el plantel:\n\n"
-                 . "📌 *Actividad:* {$nombreEvento}\n"
-                 . "🕒 *Fecha y Hora:* {$fecha}\n"
-                 . "📍 *Ubicación:* {$ubicacion}\n\n"
-                 . "¡Le esperamos! Agradecemos su puntual asistencia.";
+                 ."Se ha agendado una nueva actividad en el plantel:\n\n"
+                 ."📌 *Actividad:* {$nombreEvento}\n"
+                 ."🕒 *Fecha y Hora:* {$fecha}\n"
+                 ."📍 *Ubicación:* {$ubicacion}\n\n"
+                 .'¡Le esperamos! Agradecemos su puntual asistencia.';
 
         // 1. Enviar al canal general institucional si está configurado
-        if (!empty($this->channelId)) {
+        if (! empty($this->channelId)) {
             $this->enviarMensaje($this->channelId, $mensaje);
         }
 
         // 2. Adicionalmente, enviar de forma personalizada a todos los tutores con Chat ID activo
-        $tutoresConTelegram = \App\Models\Tutor::whereNotNull('t1_telegram_chat_id')->get();
+        $tutoresConTelegram = Tutor::whereNotNull('t1_telegram_chat_id')->get();
         foreach ($tutoresConTelegram as $tutor) {
             $this->enviarMensaje($tutor->t1_telegram_chat_id, $mensaje);
         }
@@ -71,26 +74,30 @@ class TelegramService
     {
         if ($this->modoSimulacion) {
             Log::info("🔵 SIMULACIÓN TELEGRAM a [{$chatId}]:\n{$mensaje}");
+
             return true;
         }
 
         try {
             $url = "https://api.telegram.org/bot{$this->botToken}/sendMessage";
-            $response = Http::post($url, [
+            $response = Http::timeout(5)->connectTimeout(3)->post($url, [
                 'chat_id' => $chatId,
                 'text' => $mensaje,
-                'parse_mode' => 'Markdown'
+                'parse_mode' => 'Markdown',
             ]);
 
             if ($response->successful()) {
                 Log::info("Telegram enviado exitosamente a {$chatId}");
+
                 return true;
             } else {
-                Log::error("Fallo al enviar Telegram a {$chatId}: " . $response->body());
+                Log::error("Fallo al enviar Telegram a {$chatId}: ".$response->body());
+
                 return false;
             }
         } catch (\Exception $e) {
-            Log::error("Excepción en TelegramService: " . $e->getMessage());
+            Log::error('Excepción en TelegramService: '.$e->getMessage());
+
             return false;
         }
     }
@@ -105,9 +112,9 @@ class TelegramService
         }
 
         $mensaje = "🏫 *CAM #48 - Mensaje Directo Escolar*\n\n"
-                 . "Estimado(a) *{$nombreTutor}*:\n\n"
-                 . "{$mensajeTexto}\n\n"
-                 . "_Atentamente, la Dirección Escolar._";
+                 ."Estimado(a) *{$nombreTutor}*:\n\n"
+                 ."{$mensajeTexto}\n\n"
+                 .'_Atentamente, la Dirección Escolar._';
 
         return $this->enviarMensaje($chatId, $mensaje);
     }

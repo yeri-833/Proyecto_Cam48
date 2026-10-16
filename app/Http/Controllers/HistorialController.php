@@ -212,7 +212,7 @@ class HistorialController extends Controller
      */
     public function destroy($id)
     {
-        Gate::authorize('eliminar-registros');
+        Gate::authorize('historial.eliminar');
 
         RegistroAsistencia::where('id', $id)->delete();
 

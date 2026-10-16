@@ -7,6 +7,7 @@ use App\Models\Personal;
 use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
@@ -87,15 +88,26 @@ class EstadisticasController extends Controller
             ->limit(20)
             ->get();
 
+        $tutorIds = $topTutoresRaw
+            ->pluck('asistible_id')
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+
+        /** @var Collection<int, Tutor> $tutoresMap */
+        $tutoresMap = ! empty($tutorIds)
+            ? Tutor::with('alumno')->whereIn('id', $tutorIds)->get()->keyBy('id')
+            : collect();
+
         $rankingTutores = [];
         foreach ($topTutoresRaw as $registro) {
-            $tutor = is_numeric($registro->asistible_id)
-                ? Tutor::with('alumno')->find((int) $registro->asistible_id)
-                : null;
+            $tutorId = is_numeric($registro->asistible_id) ? (int) $registro->asistible_id : null;
+            $tutor = $tutorId ? $tutoresMap->get($tutorId) : null;
 
             if ($tutor) {
                 $rankingTutores[] = [
-                    'nombre_tutor' => strtoupper(trim($tutor->t1_nombre)),
+                    'nombre_tutor' => strtoupper(trim($tutor->t1_nombre ?? '')),
                     'telefono' => $tutor->t1_telefono,
                     'nombre_alumno' => $tutor->alumno
                                           ? strtoupper($tutor->alumno->nombre_completo)

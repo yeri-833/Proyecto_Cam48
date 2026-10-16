@@ -28,6 +28,35 @@ class AsistenciaController extends Controller
     }
 
     /**
+     * Cache en memoria de las columnas de la tabla registros_asistencia para evitar
+     * consultas repetitivas de introspección de metadatos en cada escaneo QR.
+     *
+     * @var array<string, bool>|null
+     */
+    private static ?array $columnasAsistenciaCache = null;
+
+    /**
+     * Comprueba de forma eficiente y en memoria si la tabla tiene una columna específica.
+     */
+    private static function tieneColumnaAsistencia(string $columna): bool
+    {
+        if (self::$columnasAsistenciaCache === null) {
+            $columnas = Schema::getColumnListing('registros_asistencia');
+            self::$columnasAsistenciaCache = array_fill_keys($columnas, true);
+        }
+
+        return isset(self::$columnasAsistenciaCache[$columna]);
+    }
+
+    /**
+     * Permite reiniciar el cache de columnas durante pruebas o migraciones.
+     */
+    public static function flushColumnasCache(): void
+    {
+        self::$columnasAsistenciaCache = null;
+    }
+
+    /**
      * Procesa la lectura del código QR o código de barras
      */
     public function procesarQr(Request $request)
@@ -163,13 +192,13 @@ class AsistenciaController extends Controller
                 'hora' => $horaActual,
             ];
 
-            if (Schema::hasColumn('registros_asistencia', 'modo_registro')) {
+            if (self::tieneColumnaAsistencia('modo_registro')) {
                 $asistenciaData['modo_registro'] = 'QR';
             }
-            if (Schema::hasColumn('registros_asistencia', 'id_persona')) {
+            if (self::tieneColumnaAsistencia('id_persona')) {
                 $asistenciaData['id_persona'] = (string) $idPersona;
             }
-            if (Schema::hasColumn('registros_asistencia', 'rol')) {
+            if (self::tieneColumnaAsistencia('rol')) {
                 $asistenciaData['rol'] = $rol;
             }
 
@@ -187,7 +216,7 @@ class AsistenciaController extends Controller
                     $nombreCompleto
                 );
 
-                $msgResponse = 'Asistencia registrada y avisos enviados';
+                $msgResponse = 'Asistencia registrada (notificación en cola)';
             } else {
                 $msgResponse = 'Asistencia registrada';
             }

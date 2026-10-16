@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Mail\InvitacionTelegramMail;
 use App\Models\Personal;
+use App\Services\ImageUploadService;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -11,9 +12,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
-use Intervention\Image\Drivers\Gd\Driver;
-use Intervention\Image\Encoders\JpegEncoder;
-use Intervention\Image\ImageManager;
 
 class PersonalController extends Controller
 {
@@ -32,7 +30,7 @@ class PersonalController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, ImageUploadService $imageService)
     {
         Gate::authorize('personal.crear');
 
@@ -58,15 +56,7 @@ class PersonalController extends Controller
         $validated['activo'] = 1;
 
         if ($request->hasFile('foto_perfil')) {
-            $manager = new ImageManager(new Driver);
-            $image = $manager->decodePath($request->file('foto_perfil')->getRealPath());
-            $image->scaleDown(width: 800);
-            $encoded = $image->encode(new JpegEncoder(quality: 80));
-
-            $filename = 'fotos/personal/'.uniqid().'.jpg';
-            Storage::disk('public')->put($filename, $encoded->toString());
-
-            $validated['foto_perfil'] = $filename;
+            $validated['foto_perfil'] = $imageService->procesarYGuardar($request->file('foto_perfil'), 'fotos/personal/');
         }
 
         Personal::create($validated);
@@ -74,7 +64,7 @@ class PersonalController extends Controller
         return redirect()->back()->with('success', 'Personal registrado correctamente.');
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, $id, ImageUploadService $imageService)
     {
         Gate::authorize('personal.actualizar');
 
@@ -101,15 +91,7 @@ class PersonalController extends Controller
                 Storage::disk('public')->delete($personal->foto_perfil);
             }
 
-            $manager = new ImageManager(new Driver);
-            $image = $manager->decodePath($request->file('foto_perfil')->getRealPath());
-            $image->scaleDown(width: 800);
-            $encoded = $image->encode(new JpegEncoder(quality: 80));
-
-            $filename = 'fotos/personal/'.uniqid().'.jpg';
-            Storage::disk('public')->put($filename, $encoded->toString());
-
-            $validated['foto_perfil'] = $filename;
+            $validated['foto_perfil'] = $imageService->procesarYGuardar($request->file('foto_perfil'), 'fotos/personal/');
         }
 
         $personal->update($validated);
@@ -119,7 +101,7 @@ class PersonalController extends Controller
 
     public function destroy($id)
     {
-        Gate::authorize('eliminar-registros');
+        Gate::authorize('personal.eliminar');
 
         $personal = Personal::findOrFail($id);
         $personal->update(['activo' => 0]); // Borrado lógico

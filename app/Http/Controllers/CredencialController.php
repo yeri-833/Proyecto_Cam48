@@ -17,38 +17,46 @@ class CredencialController extends Controller
     {
         Gate::authorize('credenciales.generar');
 
-        $alumnos = Alumno::where('activo', 1)->get()->map(function ($a) {
-            return [
-                'id' => $a->matricula,
-                'nombre' => $a->nombre,
-                'apellido' => $a->apellido,
-                'rol' => 'Alumno',
-                'foto_perfil' => $a->foto_perfil,
-                'signature' => hash_hmac('sha256', $a->matricula.'Alumno', config('app.key')),
-            ];
-        });
+        $alumnos = Alumno::where('activo', 1)
+            ->select('matricula', 'nombre', 'apellido', 'foto_perfil')
+            ->get()
+            ->map(function ($a) {
+                return [
+                    'id' => $a->matricula,
+                    'nombre' => $a->nombre,
+                    'apellido' => $a->apellido,
+                    'rol' => 'Alumno',
+                    'foto_perfil' => $a->foto_perfil,
+                    'signature' => hash_hmac('sha256', $a->matricula.'Alumno', config('app.key')),
+                ];
+            });
 
-        $personal = Personal::where('activo', 1)->get()->map(function ($p) {
-            return [
-                'id' => $p->id,
-                'nombre' => $p->nombre_completo,
-                'apellido' => '',
-                'rol' => $p->rol ?? 'Docente',
-                'foto_perfil' => $p->foto_perfil,
-                'signature' => hash_hmac('sha256', $p->id.($p->rol ?? 'Docente'), config('app.key')),
-            ];
-        });
+        $personal = Personal::where('activo', 1)
+            ->select('id', 'nombre_completo', 'foto_perfil')
+            ->get()
+            ->map(function ($p) {
+                return [
+                    'id' => (string) $p->id,
+                    'nombre' => $p->nombre_completo,
+                    'apellido' => '',
+                    'rol' => 'Docente',
+                    'foto_perfil' => $p->foto_perfil,
+                    'signature' => hash_hmac('sha256', (string) $p->id.'Docente', config('app.key')),
+                ];
+            });
 
-        $tutores = Tutor::all()->map(function ($t) {
-            return [
-                'id' => (string) $t->id,
-                'nombre' => $t->t1_nombre,
-                'apellido' => '',
-                'rol' => 'Tutor',
-                'foto_perfil' => null,
-                'signature' => hash_hmac('sha256', (string) $t->id.'Tutor', config('app.key')),
-            ];
-        });
+        $tutores = Tutor::select('id', 't1_nombre')
+            ->get()
+            ->map(function ($t) {
+                return [
+                    'id' => (string) $t->id,
+                    'nombre' => $t->t1_nombre,
+                    'apellido' => '',
+                    'rol' => 'Tutor',
+                    'foto_perfil' => null,
+                    'signature' => hash_hmac('sha256', (string) $t->id.'Tutor', config('app.key')),
+                ];
+            });
 
         return Inertia::render('Credenciales/Index', [
             'alumnos' => $alumnos,

@@ -98,7 +98,7 @@ class EventoController extends Controller
      */
     public function destroy($id)
     {
-        Gate::authorize('eliminar-registros');
+        Gate::authorize('eventos.eliminar');
 
         $evento = Evento::findOrFail($id);
         $evento->delete();

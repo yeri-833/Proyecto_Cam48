@@ -50,7 +50,7 @@ class ExpedienteController extends Controller
             return $archivo;
         });
 
-        $alumnos = Alumno::where('activo', 1)->orderBy('nombre')->get();
+        $alumnos = Alumno::where('activo', 1)->select('matricula', 'nombre', 'apellido')->orderBy('nombre')->get();
 
         return Inertia::render('Expedientes/Index', [
             'archivos' => $archivos,

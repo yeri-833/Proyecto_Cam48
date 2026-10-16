@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Mail\InvitacionTelegramMail;
 use App\Models\Alumno;
 use App\Models\Tutor;
+use App\Services\ImageUploadService;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -12,9 +13,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
-use Intervention\Image\Drivers\Gd\Driver;
-use Intervention\Image\Encoders\JpegEncoder;
-use Intervention\Image\ImageManager;
 
 class TutorController extends Controller
 {
@@ -42,7 +40,7 @@ class TutorController extends Controller
         }
 
         $tutores = $query->orderBy('t1_nombre', 'asc')->paginate(15)->withQueryString();
-        $alumnosDisponibles = Alumno::where('activo', 1)->orderBy('nombre')->get();
+        $alumnosDisponibles = Alumno::where('activo', 1)->select('matricula', 'nombre', 'apellido')->orderBy('nombre')->get();
 
         return Inertia::render('Tutores/Index', [
             'tutores' => $tutores,
@@ -54,7 +52,7 @@ class TutorController extends Controller
     /**
      * Guarda o actualiza un tutor
      */
-    public function store(Request $request)
+    public function store(Request $request, ImageUploadService $imageService)
     {
         Gate::authorize('tutores.crear');
 
@@ -82,15 +80,7 @@ class TutorController extends Controller
                 Storage::disk('public')->delete($tutorExistente->t1_foto_perfil);
             }
 
-            $manager = new ImageManager(new Driver);
-            $image = $manager->decodePath($request->file('t1_foto_perfil')->getRealPath());
-            $image->scaleDown(width: 800);
-            $encoded = $image->encode(new JpegEncoder(quality: 80));
-
-            $filename = 'fotos/tutores/'.uniqid().'.jpg';
-            Storage::disk('public')->put($filename, $encoded->toString());
-
-            $data['t1_foto_perfil'] = $filename;
+            $data['t1_foto_perfil'] = $imageService->procesarYGuardar($request->file('t1_foto_perfil'), 'fotos/tutores/');
         }
 
         if ($tutorExistente) {
@@ -110,7 +100,7 @@ class TutorController extends Controller
      */
     public function destroy($id)
     {
-        Gate::authorize('eliminar-registros');
+        Gate::authorize('tutores.eliminar');
 
         $tutor = Tutor::findOrFail($id);
         $tutor->delete();
