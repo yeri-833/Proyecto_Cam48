@@ -2,6 +2,26 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo. El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [SemVer (Versionamiento Semántico)](https://semver.org/lang/es/).
 
+## [1.4.6] - 2026-10-16 (Versión de Desarrollo)
+
+### Seguridad
+- **Expedientes Confidenciales Privados**: Confinamiento del almacenamiento de nuevos documentos al disco `local` (`storage/app/private/expedientes/`), eliminando la exposición web directa de nuevos archivos.
+- **Autorización Granular en Expedientes**: Implementación de `ArchivoSistemaPolicy` con filtrado a nivel de base de datos previo a la paginación para docentes según asignación escolar de grado y grupo.
+- **Protocolo de Vinculación Telegram VINC_ (Consumidor CLI)**: Comando `SyncTelegramUpdates` reforzado con tokens SHA-256 temporales (30 minutos), bloqueo de comandos inseguros `tutor_{id}` y protección *fail-safe* ante ausencia de tabla. *(Nota: La migración de la tabla institucional y la interfaz web de emisión de invitaciones quedan pendientes para el despliegue institucional).*
+- **Protección de Datos Personales (PII)**: Enmascaramiento obligatorio de Chat IDs y teléfonos en registros de logs operativos (OWASP A03).
+- **Restricción de Autoregistro**: Ocultamiento del rol administrativo en el frontend y bloqueo de registro público para invitados mediante middleware `can:gestionar-usuarios`.
+
+### Añadido
+- **Pruebas de Tolerancia a Fallos en Mensajería (`NotificacionesResilienciaTest`)**: Cobertura sintética contra caídas HTTP 500 de WhatsApp, rate limits HTTP 429 de Telegram, bloqueos de bot HTTP 403, desconexión y timeouts. Demostración técnica del riesgo de duplicación en reintentos sin almacenamiento duradero.
+- **Pruebas de Autenticación Segura Institucional (`AutenticacionSeguraTest`)**: Verificación aislada del ciclo de vida de sesiones, actualización de contraseñas y políticas de acceso escolar adaptadas al esquema del plantel.
+- **Pruebas de Hardening de Fase 3 (`Fase3Etapa3HardeningTest`)**: 15 pruebas automatizadas que validan políticas de expedientes, permisos RBAC de docentes y directivos, y consumo atómico de tokens.
+
+### Corregido
+- **Mensaje Neutral de Estado en Eventos**: Corrección del flash message en `EventoController` para ser independiente del driver de colas configurado (`sync` o `database`), evitando declarar falsos procesamientos en segundo plano.
+- **Normalización de Contratos de Servicios de Mensajería**: Corrección de contratos en `WhatsAppService` y `TelegramService` para devolver tipos booleanos estrictos sin lanzar excepciones no controladas.
+
+---
+
 ## [1.4.1] - 2026-10-11
 
 ### Modificado

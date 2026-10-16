@@ -66,11 +66,11 @@ class EventoController extends Controller
                 'ubicacion' => $validated['ubicacion'] ?? '',
             ]);
 
-            // =========== ALERTAS AUTOMÁTICAS (WHATSAPP + TELEGRAM) ===========
+            // Alertas automáticas para tutores y canal institucional
             $fechaFormateada = Carbon::parse($validated['fecha_hora'])->translatedFormat('d \d\e F \d\e Y \a \l\a\s h:i A');
             $ubicacionFinal = $validated['ubicacion'] ?? 'Por confirmar';
 
-            // 1. Envíos por WhatsApp (y Email masivos que integrados anteriormente)
+            // 1. Envíos encolados por tutor (WhatsApp, Telegram e Email vía NotificarEventoTutorJob)
             $wsService = new WhatsAppService;
             $wsService->enviarAvisoEvento(
                 $validated['nombre_evento'],
@@ -78,16 +78,15 @@ class EventoController extends Controller
                 $ubicacionFinal
             );
 
-            // 2. Envíos masivos por Telegram
+            // 2. Envío al canal general institucional si está configurado
             $tgService = new TelegramService;
             $tgService->enviarAvisoEvento(
                 $validated['nombre_evento'],
                 $fechaFormateada,
                 $ubicacionFinal
             );
-            // ==========================================
 
-            $msg = 'Evento agendado y notificado a los padres.';
+            $msg = 'Evento registrado correctamente. Las notificaciones se procesarán según la configuración del sistema.';
         }
 
         return redirect()->back()->with('success', $msg);

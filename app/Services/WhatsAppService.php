@@ -9,33 +9,45 @@ use Illuminate\Support\Facades\Log;
 
 class WhatsAppService
 {
-    protected $apiUrl;
+    protected string $apiUrl;
 
-    protected $apiToken;
+    protected string $apiToken;
 
-    protected $modoSimulacion;
+    protected bool $modoSimulacion;
 
     public function __construct()
     {
-        // Se toman las credenciales vía config() en lugar de env()
-        $this->apiUrl = config('whatsapp.api_url', '');
-        $this->apiToken = config('whatsapp.api_token', '');
+        $this->apiUrl = (string) config('whatsapp.api_url', '');
+        $this->apiToken = (string) config('whatsapp.api_token', '');
 
         // Si no hay token configurado, entramos en modo simulación
         $this->modoSimulacion = empty($this->apiToken) || empty($this->apiUrl);
     }
 
     /**
-     * Envía una notificación de asistencia al tutor del alumno
+     * Enmascara el número telefónico para salvaguardar la privacidad en logs operativos (OWASP A03).
      */
-    public function enviarAvisoAsistencia($telefono, $nombreAlumno, $hora, $tipo = 'Pase de Lista')
+    private function maskPhone(string $phone): string
+    {
+        $clean = preg_replace('/[^0-9]/', '', $phone) ?? '';
+        $len = strlen($clean);
+        if ($len <= 4) {
+            return '****';
+        }
+
+        return substr($clean, 0, 3).'****'.substr($clean, -2);
+    }
+
+    /**
+     * Envía una notificación de asistencia al tutor del alumno.
+     */
+    public function enviarAvisoAsistencia(string $telefono, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): bool
     {
         if (empty($telefono)) {
             return false;
         }
 
-        // Limpiar el teléfono de espacios o guiones (ej. 555-1234 -> 5551234)
-        $telefonoLimpio = preg_replace('/[^0-9]/', '', $telefono);
+        $telefonoLimpio = preg_replace('/[^0-9]/', '', $telefono) ?? '';
 
         $mensaje = "🏫 *CAM #48 - Sistema de Accesos*\n\n"
                  ."Le informamos que el alumno(a) *{$nombreAlumno}* ha registrado su asistencia.\n\n"
@@ -47,9 +59,9 @@ class WhatsAppService
     }
 
     /**
-     * Envía una notificación general sobre un nuevo evento agendado masivamente
+     * Envía una notificación general sobre un nuevo evento encolando los envíos individuales (asíncrono).
      */
-    public function enviarAvisoEvento($nombreEvento, $fecha, $ubicacion)
+    public function enviarAvisoEvento(string $nombreEvento, string $fecha, ?string $ubicacion): bool
     {
         $mensaje = "📅 *CAM #48 - Nuevo Evento Escolar*\n\n"
                  ."Se ha agendado una nueva actividad en la escuela:\n\n"
@@ -65,52 +77,73 @@ class WhatsAppService
         // Procesar en lotes de 100 para no saturar memoria RAM
         Tutor::chunk(100, function ($tutores) use ($mensaje, $nombreEvento, $fecha, $ubicacion) {
             foreach ($tutores as $tutor) {
-                // Despachar a la cola (respuesta en milisegundos)
                 NotificarEventoTutorJob::dispatch($tutor, $mensaje, $nombreEvento, $fecha, $ubicacion ?? 'Por confirmar');
             }
         });
 
-        Log::info('✅ Creación de avisos de Evento masivos enviada a la Cola de Trabajos.');
+        Log::info('[WhatsApp] [EN_COLA] Avisos de evento despachados a la cola de trabajos.');
 
         return true;
     }
 
     /**
-     * Método base para disparar la petición HTTP a la API de WhatsApp
+     * Envía mensaje con reporte estructurado de estado operativo y enmascaramiento de datos personales.
+     *
+     * @return array{status: string, success: bool}
      */
-    public function enviarMensajeDirecto($telefonoDestino, $mensaje)
+    public function enviarMensajeDirectoDetallado(string $telefonoDestino, string $mensaje): array
     {
-        if ($this->modoSimulacion) {
-            // MODO PREPARADO / SIMULADO
-            Log::info("🟩 SIMULACIÓN WHATSAPP a [{$telefonoDestino}]:\n{$mensaje}");
+        $telefonoLimpio = preg_replace('/[^0-9]/', '', $telefonoDestino) ?? '';
+        $telefonoEnmascarado = $this->maskPhone($telefonoLimpio);
 
-            return true;
+        if ($this->modoSimulacion) {
+            Log::info("[WhatsApp] [SIMULADO] Mensaje preparado para destinatario: {$telefonoEnmascarado}. Longitud: ".strlen($mensaje).' caracteres.');
+
+            return [
+                'status' => 'Simulado',
+                'success' => false,
+            ];
         }
 
-        // MODO REAL (Cuando se configure el API)
         try {
-            // NOTA: Esta estructura varía ligeramente dependiendo del API que contrate la escuela.
-            // Aquí hay un ejemplo genérico usado por UltraMsg o GreenAPI.
-
             $response = Http::timeout(5)->connectTimeout(3)->post($this->apiUrl.'/messages/chat', [
                 'token' => $this->apiToken,
-                'to' => $telefonoDestino,
+                'to' => $telefonoLimpio,
                 'body' => $mensaje,
             ]);
 
             if ($response->successful()) {
-                Log::info("WhatsApp enviado exitosamente a {$telefonoDestino}");
+                Log::info("[WhatsApp] [ENVIADO_PROVEEDOR] Mensaje entregado exitosamente a {$telefonoEnmascarado}");
 
-                return true;
+                return [
+                    'status' => 'Enviado a proveedor',
+                    'success' => true,
+                ];
             } else {
-                Log::error("Fallo al enviar WhatsApp a {$telefonoDestino}: ".$response->body());
+                Log::error("[WhatsApp] [FALLIDO] Error devuelto por proveedor para {$telefonoEnmascarado} (HTTP {$response->status()})");
 
-                return false;
+                return [
+                    'status' => 'Fallido',
+                    'success' => false,
+                ];
             }
         } catch (\Exception $e) {
-            Log::error('Excepción en WhatsAppService: '.$e->getMessage());
+            Log::error("[WhatsApp] [FALLIDO] Excepción de conexión: {$e->getMessage()}");
 
-            return false;
+            return [
+                'status' => 'Fallido',
+                'success' => false,
+            ];
         }
+    }
+
+    /**
+     * Método base para disparar la petición HTTP a la API de WhatsApp.
+     */
+    public function enviarMensajeDirecto(string $telefonoDestino, string $mensaje): bool
+    {
+        $resultado = $this->enviarMensajeDirectoDetallado($telefonoDestino, $mensaje);
+
+        return $resultado['success'];
     }
 }

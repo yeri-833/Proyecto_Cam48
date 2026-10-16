@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Alumno;
 use App\Models\ArchivoSistema;
+use App\Models\Personal;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -13,32 +15,79 @@ use Inertia\Inertia;
 class ExpedienteController extends Controller
 {
     /**
-     * Muestra la vista del Expediente Digital
+     * Muestra la vista del Expediente Digital con filtrado estricto según el alcance del usuario (OWASP A01).
      */
     public function index(Request $request)
     {
         Gate::authorize('viewAny', ArchivoSistema::class);
 
+        /** @var User $user */
+        $user = $request->user();
         $busqueda = $request->query('busqueda', '');
 
         $query = ArchivoSistema::with('alumno');
+        $alumnosQuery = Alumno::where('activo', 1);
+
+        // Los docentes solo visualizan alumnos y expedientes de su grupo asignado
+        if (! $user->isAdmin()) {
+            /** @var Personal|null $personal */
+            $personal = Personal::where('email', $user->email)
+                ->where('activo', 1)
+                ->first();
+
+            if (! $personal || empty($personal->grado_grupo)) {
+                // Denegación por defecto (fail-secure): sin asignación demostrable no se revela información
+                $query->whereRaw('0 = 1');
+                $alumnosQuery->whereRaw('0 = 1');
+            } else {
+                $gradoGrupo = trim($personal->grado_grupo);
+
+                $alumnosQuery->where(function ($q) use ($gradoGrupo) {
+                    $parts = preg_split('/\s+/', $gradoGrupo);
+                    if ($parts !== false && count($parts) === 2) {
+                        [$grado, $grupo] = $parts;
+                        $q->where(function ($sub) use ($grado, $grupo) {
+                            $sub->where('grado', $grado)->where('grupo', $grupo);
+                        })->orWhere(function ($sub) use ($grado, $grupo) {
+                            $sub->where('grado', str_replace('°', '', $grado))->where('grupo', $grupo);
+                        })->orWhere(function ($sub) use ($grado, $grupo) {
+                            $sub->where('grado', str_replace('°', '', $grado).'°')->where('grupo', $grupo);
+                        });
+                    } elseif (preg_match('/^(\d+°?)\s*([A-Za-z]+)$/u', $gradoGrupo, $matches)) {
+                        $grado = $matches[1];
+                        $grupo = $matches[2];
+                        $q->where(function ($sub) use ($grado, $grupo) {
+                            $sub->where('grado', $grado)->where('grupo', $grupo);
+                        })->orWhere(function ($sub) use ($grado, $grupo) {
+                            $sub->where('grado', str_replace('°', '', $grado))->where('grupo', $grupo);
+                        });
+                    } else {
+                        $q->where('grado', $gradoGrupo)->orWhere('grupo', $gradoGrupo);
+                    }
+                });
+
+                $matriculasAutorizadas = (clone $alumnosQuery)->pluck('matricula')->all();
+                $query->whereIn('matricula', $matriculasAutorizadas);
+            }
+        }
 
         if (! empty($busqueda)) {
-            $query->where('nombre_original', 'LIKE', "%{$busqueda}%")
-                ->orWhere('matricula', 'LIKE', "%{$busqueda}%")
-                ->orWhereHas('alumno', function ($q) use ($busqueda) {
-                    $q->where('nombre', 'LIKE', "%{$busqueda}%")
-                        ->orWhere('apellido', 'LIKE', "%{$busqueda}%");
-                });
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('nombre_original', 'LIKE', "%{$busqueda}%")
+                    ->orWhere('matricula', 'LIKE', "%{$busqueda}%")
+                    ->orWhereHas('alumno', function ($sub) use ($busqueda) {
+                        $sub->where('nombre', 'LIKE', "%{$busqueda}%")
+                            ->orWhere('apellido', 'LIKE', "%{$busqueda}%");
+                    });
+            });
         }
 
         $archivos = $query->orderBy('fecha_subida', 'desc')->paginate(15)->through(function ($archivo) {
-            // URL protegida por autenticación y control de acceso
             $archivo->url = route('expedientes.ver', $archivo->id);
             $archivo->download_url = route('expedientes.descargar', $archivo->id);
             $archivo->fecha_formateada = Carbon::parse($archivo->fecha_subida)->format('d/m/Y h:i A');
-            // Convertir bytes a formato legible
-            $bytes = $archivo->tamano_bytes;
+
+            $bytes = $archivo->tamano_bytes ?? 0;
             $unidades = ['B', 'KB', 'MB', 'GB'];
             $i = 0;
             while ($bytes >= 1024 && $i < count($unidades) - 1) {
@@ -50,7 +99,8 @@ class ExpedienteController extends Controller
             return $archivo;
         });
 
-        $alumnos = Alumno::where('activo', 1)->select('matricula', 'nombre', 'apellido')->orderBy('nombre')->get();
+        // El selector de alumnos también se limita estrictamente al alcance del docente
+        $alumnos = $alumnosQuery->select('matricula', 'nombre', 'apellido')->orderBy('nombre')->get();
 
         return Inertia::render('Expedientes/Index', [
             'archivos' => $archivos,
@@ -61,6 +111,7 @@ class ExpedienteController extends Controller
 
     /**
      * Sube un nuevo documento confidencial al expediente en almacenamiento privado.
+     * Comprueba autorización respecto al alumno de destino (OWASP A01).
      */
     public function store(Request $request)
     {
@@ -73,6 +124,12 @@ class ExpedienteController extends Controller
             'archivo.mimes' => 'Solo se permiten archivos PDF, Imágenes, Word o ZIP/RAR.',
             'archivo.max' => 'El archivo no debe pesar más de 10MB.',
         ]);
+
+        /** @var Alumno $alumno */
+        $alumno = Alumno::where('matricula', $request->input('matricula'))->firstOrFail();
+
+        // Validar que el usuario tenga autorización sobre el alumno de destino
+        Gate::authorize('create', [ArchivoSistema::class, $alumno]);
 
         $file = $request->file('archivo');
         $ext = strtolower($file->getClientOriginalExtension());
@@ -91,7 +148,7 @@ class ExpedienteController extends Controller
 
         // Registro en BD
         ArchivoSistema::create([
-            'matricula' => $request->matricula,
+            'matricula' => $alumno->matricula,
             'nombre_original' => $file->getClientOriginalName(),
             'nombre_servidor' => $nombre_servidor,
             'tipo_mime' => $file->getMimeType(),

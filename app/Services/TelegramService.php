@@ -8,25 +8,42 @@ use Illuminate\Support\Facades\Log;
 
 class TelegramService
 {
-    protected $botToken;
+    protected string $botToken;
 
-    protected $channelId;
+    protected string $channelId;
 
-    protected $modoSimulacion;
+    protected bool $modoSimulacion;
 
     public function __construct()
     {
-        $this->botToken = config('telegram.bot_token', '');
-        $this->channelId = config('telegram.channel_id', '');
+        $this->botToken = (string) config('telegram.bot_token', '');
+        $this->channelId = (string) config('telegram.channel_id', '');
 
-        // Si no hay token de bot, entramos en modo simulación (Mock)
+        // Si no hay token de bot, entramos en modo simulación
         $this->modoSimulacion = empty($this->botToken);
     }
 
     /**
-     * Envía un aviso individual a un tutor por Telegram
+     * Enmascara el identificador de chat para proteger la privacidad en logs operativos (OWASP A03).
      */
-    public function enviarAvisoAsistencia($chatId, $nombreAlumno, $hora, $tipo = 'Pase de Lista')
+    private function maskChatId(string|int|null $chatId): string
+    {
+        if (empty($chatId)) {
+            return '****';
+        }
+        $str = (string) $chatId;
+        $len = strlen($str);
+        if ($len <= 4) {
+            return '****';
+        }
+
+        return substr($str, 0, 3).'****'.substr($str, -2);
+    }
+
+    /**
+     * Envía un aviso individual a un tutor por Telegram.
+     */
+    public function enviarAvisoAsistencia(string|int|null $chatId, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): bool
     {
         if (empty($chatId)) {
             return false;
@@ -42,40 +59,55 @@ class TelegramService
     }
 
     /**
-     * Envía una notificación masiva de eventos al canal escolar general
+     * Envía notificación masiva de eventos al canal escolar general institucional (si está configurado).
      */
-    public function enviarAvisoEvento($nombreEvento, $fecha, $ubicacion)
+    public function enviarAvisoEvento(string $nombreEvento, string $fecha, ?string $ubicacion): bool
     {
         $mensaje = "📅 *CAM #48 - Nuevo Evento Escolar*\n\n"
                  ."Se ha agendado una nueva actividad en el plantel:\n\n"
                  ."📌 *Actividad:* {$nombreEvento}\n"
                  ."🕒 *Fecha y Hora:* {$fecha}\n"
-                 ."📍 *Ubicación:* {$ubicacion}\n\n"
+                 .'📍 *Ubicación:* '.($ubicacion ?? 'Plantel escolar')."\n\n"
                  .'¡Le esperamos! Agradecemos su puntual asistencia.';
 
-        // 1. Enviar al canal general institucional si está configurado
         if (! empty($this->channelId)) {
-            $this->enviarMensaje($this->channelId, $mensaje);
-        }
-
-        // 2. Adicionalmente, enviar de forma personalizada a todos los tutores con Chat ID activo
-        $tutoresConTelegram = Tutor::whereNotNull('t1_telegram_chat_id')->get();
-        foreach ($tutoresConTelegram as $tutor) {
-            $this->enviarMensaje($tutor->t1_telegram_chat_id, $mensaje);
+            return $this->enviarMensaje($this->channelId, $mensaje);
         }
 
         return true;
     }
 
     /**
-     * Método base para mandar la petición HTTP a la API de Telegram
+     * Envía notificación de evento a un tutor individual de forma asíncrona dentro de un Job de cola.
      */
-    private function enviarMensaje($chatId, $mensaje)
+    public function enviarAvisoEventoDirecto(string|int $chatId, string $nombreEvento, string $fecha, ?string $ubicacion): bool
     {
-        if ($this->modoSimulacion) {
-            Log::info("🔵 SIMULACIÓN TELEGRAM a [{$chatId}]:\n{$mensaje}");
+        $mensaje = "📅 *CAM #48 - Notificación de Evento Escolar*\n\n"
+                 ."Estimado tutor, le recordamos la próxima actividad escolar:\n\n"
+                 ."📌 *Actividad:* {$nombreEvento}\n"
+                 ."🕒 *Fecha y Hora:* {$fecha}\n"
+                 .'📍 *Ubicación:* '.($ubicacion ?? 'Plantel escolar')."\n\n"
+                 .'_Mensaje institucional automático._';
 
-            return true;
+        return $this->enviarMensaje($chatId, $mensaje);
+    }
+
+    /**
+     * Envía mensaje con reporte estructurado de estado operativo y enmascaramiento de datos personales.
+     *
+     * @return array{status: string, success: bool}
+     */
+    public function enviarMensajeDetallado(string|int $chatId, string $mensaje): array
+    {
+        $destinatarioEnmascarado = $this->maskChatId($chatId);
+
+        if ($this->modoSimulacion) {
+            Log::info("[Telegram] [SIMULADO] Notificación preparada para destinatario: {$destinatarioEnmascarado}. Longitud: ".strlen($mensaje).' caracteres.');
+
+            return [
+                'status' => 'Simulado',
+                'success' => false,
+            ];
         }
 
         try {
@@ -87,25 +119,44 @@ class TelegramService
             ]);
 
             if ($response->successful()) {
-                Log::info("Telegram enviado exitosamente a {$chatId}");
+                Log::info("[Telegram] [ENVIADO_PROVEEDOR] Mensaje entregado exitosamente a {$destinatarioEnmascarado}");
 
-                return true;
+                return [
+                    'status' => 'Enviado a proveedor',
+                    'success' => true,
+                ];
             } else {
-                Log::error("Fallo al enviar Telegram a {$chatId}: ".$response->body());
+                Log::error("[Telegram] [FALLIDO] Proveedor rechazó mensaje a {$destinatarioEnmascarado} (HTTP {$response->status()})");
 
-                return false;
+                return [
+                    'status' => 'Fallido',
+                    'success' => false,
+                ];
             }
         } catch (\Exception $e) {
-            Log::error('Excepción en TelegramService: '.$e->getMessage());
+            Log::error("[Telegram] [FALLIDO] Excepción de conexión: {$e->getMessage()}");
 
-            return false;
+            return [
+                'status' => 'Fallido',
+                'success' => false,
+            ];
         }
     }
 
     /**
-     * Envía un mensaje de texto directo y personalizado a un tutor específico
+     * Método base para mandar la petición HTTP a la API de Telegram.
      */
-    public function enviarMensajeDirecto($chatId, $nombreTutor, $mensajeTexto)
+    private function enviarMensaje(string|int $chatId, string $mensaje): bool
+    {
+        $resultado = $this->enviarMensajeDetallado($chatId, $mensaje);
+
+        return $resultado['success'];
+    }
+
+    /**
+     * Envía un mensaje de texto directo y personalizado a un tutor específico.
+     */
+    public function enviarMensajeDirecto(string|int $chatId, string $nombreTutor, string $mensajeTexto): bool
     {
         if (empty($chatId)) {
             return false;

@@ -2,15 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\InvitacionTelegramMail;
 use App\Models\Alumno;
 use App\Models\Tutor;
 use App\Services\ImageUploadService;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -145,29 +142,9 @@ class TutorController extends Controller
      */
     public function enviarInvitacionTelegram($id)
     {
-        $tutor = Tutor::findOrFail($id);
+        Gate::authorize('tutores.actualizar');
 
-        if (empty($tutor->t1_email)) {
-            return redirect()->back()->withErrors([
-                'mensaje' => 'El tutor no tiene un correo electrónico registrado para enviar la invitación.',
-            ]);
-        }
-
-        // Generamos el enlace mágico
-        $botUsername = config('telegram.bot_username');
-        $codigoMagico = 'tutor_'.$tutor->id;
-        $enlaceMagico = "https://t.me/{$botUsername}?start={$codigoMagico}";
-
-        try {
-            Mail::to($tutor->t1_email)->send(new InvitacionTelegramMail($tutor, $enlaceMagico));
-
-            return redirect()->back()->with('success', 'Invitación enviada por correo electrónico correctamente.');
-        } catch (\Exception $e) {
-            Log::error('Error enviando invitación Telegram a tutor: '.$e->getMessage(), ['id' => $id]);
-
-            return redirect()->back()->withErrors([
-                'mensaje' => 'Hubo un problema al enviar el correo. Intenta de nuevo más tarde.',
-            ]);
-        }
+        // 3.1 MEDIDA INMEDIATA: Bloquear generación de invitaciones por ID secuencial directo (OWASP A01)
+        return redirect()->back()->with('warning', 'La generación de invitaciones mediante identificadores directos ha sido deshabilitada por políticas de privacidad escolar (v1.4.6). El protocolo criptográfico tokenizado está pendiente de migración institucional.');
     }
 }

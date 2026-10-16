@@ -2,14 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\InvitacionTelegramMail;
 use App\Models\Personal;
 use App\Services\ImageUploadService;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -163,29 +160,9 @@ class PersonalController extends Controller
 
     public function enviarInvitacionTelegram($id)
     {
-        $personal = Personal::findOrFail($id);
+        Gate::authorize('personal.actualizar');
 
-        $botUsername = config('telegram.bot_username');
-        $codigoMagico = 'personal_'.$personal->id;
-        $enlaceMagico = "https://t.me/{$botUsername}?start={$codigoMagico}";
-
-        if (! empty($personal->email)) {
-            try {
-                // Usaremos un MailGenérico o adaptaremos el de Tutor
-                // Para simplificar, le enviaremos el de Tutor simulando la estructura
-                $dummyTutor = (object) ['t1_nombre' => 'Profesor(a) '.$personal->nombre_completo];
-                Mail::to($personal->email)->send(new InvitacionTelegramMail($dummyTutor, $enlaceMagico));
-
-                return redirect()->back()->with('success', 'Invitación enviada por correo electrónico al docente exitosamente.');
-            } catch (\Exception $e) {
-                Log::error('Error enviando invitación Telegram a personal: '.$e->getMessage(), ['id' => $id]);
-
-                return redirect()->back()->withErrors([
-                    'mensaje' => 'No se pudo enviar el correo. Puedes enviarle este enlace de forma manual: '.$enlaceMagico,
-                ]);
-            }
-        }
-
-        return redirect()->back()->with('success', 'Comparte este enlace con el profesor por WhatsApp para vincular su cuenta: '.$enlaceMagico);
+        // 3.1 MEDIDA INMEDIATA: Bloquear generación de invitaciones por ID secuencial directo (OWASP A01)
+        return redirect()->back()->with('warning', 'La generación de invitaciones mediante identificadores directos ha sido deshabilitada por políticas de privacidad escolar (v1.4.6). El protocolo criptográfico tokenizado está pendiente de migración institucional.');
     }
 }

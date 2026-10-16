@@ -6,8 +6,10 @@ use App\Models\Personal;
 use App\Models\Tutor;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class SyncTelegramUpdates extends Command
 {
@@ -57,49 +59,82 @@ class SyncTelegramUpdates extends Command
                         $text = $update['message']['text'];
                         $chatId = $update['message']['chat']['id'];
 
-                        if (preg_match('/^\/start tutor_(\d+)$/', $text, $matches)) {
-                            $tutorId = $matches[1];
-                            $tutor = Tutor::find($tutorId);
+                        if (preg_match('/^\/start tutor_(\d+)$/', $text) || preg_match('/^\/start personal_(\d+)$/', $text)) {
+                            // 3.1 MEDIDA INMEDIATA: Bloquear vinculaciones por identificadores secuenciales directos (OWASP A01)
+                            Log::warning('[Telegram Security] Intento de vinculación bloqueado por identificador secuencial inseguro.', [
+                                'chat_id' => $chatId,
+                            ]);
 
-                            if ($tutor && empty($tutor->t1_telegram_chat_id)) {
-                                $tutor->t1_telegram_chat_id = $chatId;
-                                $tutor->save();
+                            $mensajeAviso = "⚠️ *Aviso de Seguridad Institucional — CAM #48*\n\n"
+                                          ."El método de vinculación mediante identificador numérico directo ha sido deshabilitado permanentemente para proteger la privacidad de los alumnos y del personal escolar.\n\n"
+                                          .'Por favor solicite en el plantel una invitación institucional verificada.';
 
-                                $vinculadosNuevos[] = $tutor->t1_nombre;
+                            Http::timeout(5)->connectTimeout(3)->post("https://api.telegram.org/bot{$token}/sendMessage", [
+                                'chat_id' => $chatId,
+                                'text' => $mensajeAviso,
+                                'parse_mode' => 'Markdown',
+                            ]);
+                        } elseif (preg_match('/^\/start VINC_([A-Za-z0-9_]{48})$/', $text, $matches)) {
+                            // 3.2 Protocolo Criptográfico Seguro de Vinculación (docs/seguridad/protocolo_vinculacion_telegram.md)
+                            $rawToken = $matches[1];
+                            $tokenHash = hash('sha256', $rawToken);
 
-                                // Enviar bienvenida y enlace al grupo
-                                $mensaje = "🎉 *¡Vinculación Exitosa!*\n\n"
-                                         ."Hola *{$tutor->t1_nombre}*, tu cuenta ha sido conectada al sistema del CAM #48.\n\n"
-                                         ."A partir de este momento, recibirás mensajes directos por aquí.\n\n"
-                                         ."📢 *¡Paso Final! Únete al grupo oficial:*\n"
-                                         ."Para recibir los avisos y circulares generales de la escuela, por favor únete a nuestro canal tocando el siguiente enlace:\n"
-                                         .'👉 https://t.me/cam48comunicados';
+                            // Verificar si la tabla telegram_vinculaciones existe en el entorno actual
+                            if (Schema::hasTable('telegram_vinculaciones')) {
+                                DB::transaction(function () use ($tokenHash, $chatId, $token, &$vinculadosNuevos) {
+                                    $vinculacion = DB::table('telegram_vinculaciones')
+                                        ->where('token_hash', $tokenHash)
+                                        ->whereNull('used_at')
+                                        ->where('expires_at', '>', now())
+                                        ->lockForUpdate()
+                                        ->first();
 
-                                Http::post("https://api.telegram.org/bot{$token}/sendMessage", [
+                                    if (! $vinculacion) {
+                                        Http::timeout(5)->connectTimeout(3)->post("https://api.telegram.org/bot{$token}/sendMessage", [
+                                            'chat_id' => $chatId,
+                                            'text' => '⚠️ El enlace de vinculación es inválido, ya fue utilizado o ha expirado (vigencia de 30 minutos). Solicite una nueva invitación en el plantel.',
+                                        ]);
+
+                                        return;
+                                    }
+
+                                    // Asociación según tipo polimórfico
+                                    if ($vinculacion->vinculable_type === Tutor::class) {
+                                        $tutor = Tutor::find($vinculacion->vinculable_id);
+                                        if ($tutor) {
+                                            $tutor->t1_telegram_chat_id = (string) $chatId;
+                                            $tutor->save();
+                                            $vinculadosNuevos[] = 'Tutor: '.$tutor->t1_nombre;
+                                        }
+                                    } elseif ($vinculacion->vinculable_type === Personal::class) {
+                                        $personal = Personal::find($vinculacion->vinculable_id);
+                                        if ($personal) {
+                                            $personal->telegram_chat_id = (string) $chatId;
+                                            $personal->save();
+                                            $vinculadosNuevos[] = 'Personal: '.$personal->nombre_completo;
+                                        }
+                                    }
+
+                                    // Consumo atómico único (Single-use)
+                                    DB::table('telegram_vinculaciones')
+                                        ->where('id', $vinculacion->id)
+                                        ->update([
+                                            'used_at' => now(),
+                                            'chat_id_registrado' => (string) $chatId,
+                                        ]);
+
+                                    Http::timeout(5)->connectTimeout(3)->post("https://api.telegram.org/bot{$token}/sendMessage", [
+                                        'chat_id' => $chatId,
+                                        'text' => "🎉 *¡Vinculación Criptográfica Exitosa!*\n\nSu cuenta de Telegram ha sido verificada y vinculada exitosamente con el sistema institucional FamilyLock CAM #48.",
+                                        'parse_mode' => 'Markdown',
+                                    ]);
+                                });
+                            } else {
+                                Log::info('[Telegram Security] Token VINC recibido pero la tabla telegram_vinculaciones aún no está instalada en el esquema institucional.');
+
+                                Http::timeout(5)->connectTimeout(3)->post("https://api.telegram.org/bot{$token}/sendMessage", [
                                     'chat_id' => $chatId,
-                                    'text' => $mensaje,
-                                    'parse_mode' => 'Markdown',
-                                ]);
-                            }
-                        } elseif (preg_match('/^\/start personal_(\d+)$/', $text, $matches)) {
-                            $personalId = $matches[1];
-                            $personal = Personal::find($personalId);
-
-                            if ($personal && empty($personal->telegram_chat_id)) {
-                                $personal->telegram_chat_id = $chatId;
-                                $personal->save();
-
-                                $vinculadosNuevos[] = 'Prof. '.$personal->nombre_completo;
-
-                                $mensaje = "🎉 *¡Vinculación Exitosa!*\n\n"
-                                         ."Hola *{$personal->nombre_completo}*, tu cuenta ha sido conectada al portal del Personal del CAM #48.\n\n"
-                                         ."Recibirás avisos institucionales, notificaciones de juntas y circulares directamente en este chat.\n\n"
-                                         .'📢 *Recuerda unirte al grupo del personal si no lo has hecho:* (Consulta el enlace con Dirección).';
-
-                                Http::post("https://api.telegram.org/bot{$token}/sendMessage", [
-                                    'chat_id' => $chatId,
-                                    'text' => $mensaje,
-                                    'parse_mode' => 'Markdown',
+                                    'text' => '⚙️ El sistema de vinculación criptográfica se encuentra en preparación para la versión 1.4.6. Próximamente estará disponible.',
                                 ]);
                             }
                         }

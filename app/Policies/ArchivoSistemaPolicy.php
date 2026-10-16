@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Models\Alumno;
 use App\Models\ArchivoSistema;
 use App\Models\Personal;
 use App\Models\User;
@@ -18,37 +19,35 @@ class ArchivoSistemaPolicy
 
     /**
      * Determina si el usuario puede ver o descargar un documento confidencial específico.
-     *
-     * CONSIDERACIONES DE SEGURIDAD ESCOLAR (OWASP A01 / ASVS):
-     * - Administradores y Directivos tienen acceso completo a expedientes.
-     * - Para Docentes/Personal:
-     *   LIMITACIÓN ARQUITECTÓNICA CONFIRMADA: En el esquema actual de la base de datos
-     *   no existe una tabla pivote de asignación docente-alumno, ni clave foránea entre
-     *   `usuarios` y `personal`. La columna `grado_grupo` en `personal` no tiene relación
-     *   relacional estricta con `alumnos.grado` y `alumnos.grupo`.
-     *   Por principio de mínimo privilegio y fail-secure, el acceso a documentos específicos
-     *   permanece restringido a Administradores y a docentes con grupo coincidente verificado,
-     *   requiriendo decisión directiva institucional antes de habilitar permisos amplios.
      */
     public function view(User $user, ArchivoSistema $archivo): bool
     {
-        // 1. Directores y Administradores tienen acceso institucional irrestricto
         if ($user->isAdmin()) {
             return true;
         }
 
-        // 2. Si no es personal escolar, bloqueo inmediato (HTTP 403)
-        if (! $user->isPersonal()) {
-            return false;
-        }
-
-        // 3. Verificación de relación autorizada Docente <-> Alumno
         $alumno = $archivo->alumno;
         if (! $alumno) {
             return false;
         }
 
-        // Buscamos si el usuario tiene ficha de Personal vinculada por correo
+        return $this->canAccessAlumno($user, $alumno);
+    }
+
+    /**
+     * Verifica si el usuario tiene autorización sobre un alumno específico.
+     * Aplica principio de fail-secure y mínimo privilegio (OWASP A01).
+     */
+    public function canAccessAlumno(User $user, Alumno $alumno): bool
+    {
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if (! $user->isPersonal()) {
+            return false;
+        }
+
         /** @var Personal|null $personal */
         $personal = Personal::where('email', $user->email)
             ->where('activo', 1)
@@ -65,18 +64,41 @@ class ArchivoSistemaPolicy
             ) {
                 return true;
             }
+
+            // Normalización para compatibilidad con símbolos de grado (ej. '1° A' vs '1A')
+            $docenteNorm = str_replace(['°', ' '], '', strtolower($gradoGrupoDocente));
+            $alumnoNorm = str_replace(['°', ' '], '', strtolower($grupoAlumnoSinEspacio));
+            if (! empty($docenteNorm) && $docenteNorm === $alumnoNorm) {
+                return true;
+            }
         }
 
-        // Sin coincidencia verificable ni autorización institucional, denegar acceso por defecto (403)
         return false;
     }
 
     /**
-     * Determina si el usuario puede subir documentos al expediente del alumno.
+     * Determina si el usuario puede subir documentos al expediente escolar.
+     * Si se proporciona el alumno destino, se valida que pertenezca a la asignación autorizada.
      */
-    public function create(User $user): bool
+    public function create(User $user, ?Alumno $alumno = null): bool
     {
-        return $user->isPersonal();
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if (! $user->isPersonal()) {
+            return false;
+        }
+
+        if ($alumno !== null) {
+            return $this->canAccessAlumno($user, $alumno);
+        }
+
+        // Si no se especifica el alumno, debe tener ficha de personal docente activa con grupo asignado
+        /** @var Personal|null $personal */
+        $personal = Personal::where('email', $user->email)->where('activo', 1)->first();
+
+        return $personal !== null && ! empty($personal->grado_grupo);
     }
 
     /**

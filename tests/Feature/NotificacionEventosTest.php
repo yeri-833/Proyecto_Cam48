@@ -30,6 +30,7 @@ class NotificacionEventosTest extends TestCase
         ]);
 
         $response->assertStatus(302);
+        $response->assertSessionHas('success', 'Evento registrado correctamente. Las notificaciones se procesarán según la configuración del sistema.');
 
         // Contar cuántos tutores hay en BD
         $totalTutores = Tutor::count();
