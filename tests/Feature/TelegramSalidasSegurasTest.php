@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\TelegramService;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Artisan;
@@ -31,6 +32,38 @@ class TelegramSalidasSegurasTest extends TestCase
         config(['telegram.bot_token' => self::BotToken]);
         Http::preventStrayRequests();
         Log::spy();
+    }
+
+    #[DataProvider('respuestasHttpFallidas')]
+    public function test_sync_rechaza_respuestas_http_fallidas_sin_exponer_datos_ni_avanzar_offset(int $status): void
+    {
+        Cache::put('telegram_bot_offset', 17);
+        Http::fake([
+            'https://api.telegram.org/bot'.self::BotToken.'/getUpdates*' => Http::response([
+                'ok' => false,
+                'description' => self::ChatId.' '.self::BotToken.' '.self::VincToken,
+            ], $status),
+        ]);
+
+        $this->artisan('telegram:sync')
+            ->doesntExpectOutputToContain(self::ChatId)
+            ->doesntExpectOutputToContain(self::BotToken)
+            ->doesntExpectOutputToContain(self::VincToken)
+            ->expectsOutputToContain('TELEGRAM_SYNC_FAILED')
+            ->assertFailed();
+
+        $this->assertSame(17, Cache::get('telegram_bot_offset'));
+        $this->assertLogSeguro('TELEGRAM_SYNC_FAILED');
+        Log::shouldHaveReceived('error')->once()->withArgs(
+            static fn (string $mensaje, array $contexto): bool => ($contexto['http_status'] ?? null) === $status,
+        );
+        Http::assertSentCount(1);
+    }
+
+    /** @return array<string, array{int}> */
+    public static function respuestasHttpFallidas(): array
+    {
+        return ['no autorizado' => [401], 'limite de solicitudes' => [429], 'error del proveedor' => [500]];
     }
 
     #[DataProvider('fallosSinteticos')]
@@ -94,6 +127,10 @@ class TelegramSalidasSegurasTest extends TestCase
     public function test_sync_sanea_errores_de_cache_anteriores_a_la_lectura_de_mensajes(): void
     {
         Http::fake();
+        $realCacheManager = Cache::getFacadeRoot();
+        Cache::shouldReceive('driver')->andReturnUsing(
+            static fn (?string $store = null): Repository => $realCacheManager->driver($store),
+        );
         Cache::shouldReceive('get')->once()->with('telegram_bot_offset', 0)->andThrow($this->crearExcepcion('conexion'));
 
         $this->artisan('telegram:sync')
@@ -108,6 +145,10 @@ class TelegramSalidasSegurasTest extends TestCase
     public function test_endpoint_sanea_errores_al_adquirir_el_bloqueo(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
+        $realCacheManager = Cache::getFacadeRoot();
+        Cache::shouldReceive('driver')->andReturnUsing(
+            static fn (?string $store = null): Repository => $realCacheManager->driver($store),
+        );
         Cache::shouldReceive('lock')->once()->with('telegram_sync_lock', 10)->andThrow($this->crearExcepcion('sql'));
 
         $response = $this->actingAs($admin)->getJson(route('telegram.sync'));

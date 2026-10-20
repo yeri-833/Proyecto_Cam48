@@ -143,6 +143,13 @@ class SyncTelegramUpdates extends Command
 
                 // Actualizamos el offset para no volver a leer los mismos mensajes
                 Cache::put('telegram_bot_offset', $offset, now()->addDays(1));
+            } else {
+                Log::error('[TELEGRAM_SYNC_FAILED] No fue posible sincronizar Telegram.', [
+                    'http_status' => $response->status(),
+                ]);
+                $this->error('No fue posible sincronizar Telegram. Código: TELEGRAM_SYNC_FAILED.');
+
+                return Command::FAILURE;
             }
         } catch (\Throwable $exception) {
             Log::error('[TELEGRAM_SYNC_FAILED] No fue posible sincronizar Telegram.', [

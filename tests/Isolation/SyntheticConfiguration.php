@@ -48,7 +48,7 @@ final class SyntheticConfiguration
             ],
             'cache' => ['default' => 'array', 'stores' => ['array' => ['driver' => 'array', 'serialize' => false]], 'prefix' => 'synthetic'],
             'session' => [
-                'driver' => 'array', 'lifetime' => 120, 'expire_on_close' => false, 'encrypt' => false,
+                'driver' => 'array', 'lifetime' => 120, 'lottery' => [2, 100], 'expire_on_close' => false, 'encrypt' => false,
                 'files' => $runtime.'/storage/sessions', 'cookie' => 'synthetic_session', 'path' => '/',
                 'domain' => null, 'secure' => false, 'http_only' => true, 'same_site' => 'lax',
             ],
@@ -78,6 +78,7 @@ final class SyntheticConfiguration
                 ],
                 'history' => ['encrypt' => false],
             ],
+            'ziggy' => ['skip-route-function' => true],
             'telegram' => ['bot_token' => '', 'bot_username' => 'synthetic_bot', 'channel_id' => ''],
             'whatsapp' => ['api_url' => '', 'api_token' => ''],
             'boost' => ['enabled' => false],

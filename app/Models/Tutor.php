@@ -37,6 +37,7 @@ class Tutor extends Model
         't1_nombre',
         't1_parentesco',
         't1_telefono',
+        't1_email',
         't1_direccion',
         't1_profesion',
         't1_foto_perfil',
