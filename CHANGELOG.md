@@ -2,6 +2,20 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo. El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [SemVer (Versionamiento Semántico)](https://semver.org/lang/es/).
 
+## [1.4.7] - 2026-10-19
+
+### Seguridad
+- **Políticas de Autorización RBAC en Alumnos (`AlumnoPolicy`)**: Implementación de autorización granular para directores y docentes, garantizando aislamiento de acceso según grado/grupo asignado.
+- **Hardening de Privacidad y Salidas Seguras en Telegram**: Sanitización estricta de mensajes salientes, enmascaramiento reforzado de PII y prevención de fugas de metadatos sensibles en `SyncTelegramUpdates` y `TelegramService`.
+- **Protección de Rutas de Perfil**: Robustecimiento en `ProfileController` y validación tipada estricta en `ProfileUpdateRequest`.
+
+### Añadido
+- **Suite de Pruebas Aisladas en Memoria (`tests/Isolation/`)**: Entorno de ejecución sintético y ultra-rápido para pruebas de seguridad unitarias y validación sin dependencias externas.
+- **Pruebas de Autorización Consistente**: Cobertura integral en `AlumnosAutorizacionTest`, `ExpedientesAutorizacionConsistenteTest`, `TelegramPrivacidadHardeningTest` y `TelegramSalidasSegurasTest`.
+- **Plantillas de Windows Sandbox para FamilyLock**: Manifiesto y archivo de propuesta `.wsb` en `docs/` para pruebas en entornos aislados.
+
+---
+
 ## [1.4.6] - 2026-10-16 (Versión de Desarrollo)
 
 ### Seguridad

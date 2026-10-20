@@ -39,4 +39,4 @@ test_*.txt
 test_*.php
 
 # Antigravity/Superpowers embedded repos
-.agents/plugins/superpowers/
+.agents/plugins/

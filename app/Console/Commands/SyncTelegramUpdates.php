@@ -30,7 +30,7 @@ class SyncTelegramUpdates extends Command
     /**
      * Execute the console command.
      */
-    public function handle()
+    public function handle(): int
     {
         $token = config('telegram.bot_token');
         if (empty($token)) {
@@ -39,10 +39,10 @@ class SyncTelegramUpdates extends Command
             return Command::FAILURE;
         }
 
-        $offset = Cache::get('telegram_bot_offset', 0);
-        $vinculadosNuevos = [];
+        $vinculadosNuevos = 0;
 
         try {
+            $offset = Cache::get('telegram_bot_offset', 0);
             $response = Http::timeout(5)
                 ->get("https://api.telegram.org/bot{$token}/getUpdates", [
                     'offset' => $offset,
@@ -62,7 +62,7 @@ class SyncTelegramUpdates extends Command
                         if (preg_match('/^\/start tutor_(\d+)$/', $text) || preg_match('/^\/start personal_(\d+)$/', $text)) {
                             // 3.1 MEDIDA INMEDIATA: Bloquear vinculaciones por identificadores secuenciales directos (OWASP A01)
                             Log::warning('[Telegram Security] Intento de vinculación bloqueado por identificador secuencial inseguro.', [
-                                'chat_id' => $chatId,
+                                'chat_id' => $this->maskChatId($chatId),
                             ]);
 
                             $mensajeAviso = "⚠️ *Aviso de Seguridad Institucional — CAM #48*\n\n"
@@ -74,7 +74,7 @@ class SyncTelegramUpdates extends Command
                                 'text' => $mensajeAviso,
                                 'parse_mode' => 'Markdown',
                             ]);
-                        } elseif (preg_match('/^\/start VINC_([A-Za-z0-9_]{48})$/', $text, $matches)) {
+                        } elseif (preg_match('/^\/start VINC_([0-9a-fA-F]{48})$/', $text, $matches)) {
                             // 3.2 Protocolo Criptográfico Seguro de Vinculación (docs/seguridad/protocolo_vinculacion_telegram.md)
                             $rawToken = $matches[1];
                             $tokenHash = hash('sha256', $rawToken);
@@ -104,14 +104,14 @@ class SyncTelegramUpdates extends Command
                                         if ($tutor) {
                                             $tutor->t1_telegram_chat_id = (string) $chatId;
                                             $tutor->save();
-                                            $vinculadosNuevos[] = 'Tutor: '.$tutor->t1_nombre;
+                                            $vinculadosNuevos++;
                                         }
                                     } elseif ($vinculacion->vinculable_type === Personal::class) {
                                         $personal = Personal::find($vinculacion->vinculable_id);
                                         if ($personal) {
                                             $personal->telegram_chat_id = (string) $chatId;
                                             $personal->save();
-                                            $vinculadosNuevos[] = 'Personal: '.$personal->nombre_completo;
+                                            $vinculadosNuevos++;
                                         }
                                     }
 
@@ -134,7 +134,7 @@ class SyncTelegramUpdates extends Command
 
                                 Http::timeout(5)->connectTimeout(3)->post("https://api.telegram.org/bot{$token}/sendMessage", [
                                     'chat_id' => $chatId,
-                                    'text' => '⚙️ El sistema de vinculación criptográfica se encuentra en preparación para la versión 1.4.6. Próximamente estará disponible.',
+                                    'text' => '⚙️ El sistema de vinculación criptográfica se encuentra en preparación institucional. Próximamente estará disponible.',
                                 ]);
                             }
                         }
@@ -144,19 +144,35 @@ class SyncTelegramUpdates extends Command
                 // Actualizamos el offset para no volver a leer los mismos mensajes
                 Cache::put('telegram_bot_offset', $offset, now()->addDays(1));
             }
-        } catch (\Exception $e) {
-            Log::error('Error en SyncTelegramUpdates: '.$e->getMessage());
-            $this->error('Error de sincronización: '.$e->getMessage());
+        } catch (\Throwable $exception) {
+            Log::error('[TELEGRAM_SYNC_FAILED] No fue posible sincronizar Telegram.', [
+                'exception_type' => $exception::class,
+            ]);
+            $this->error('No fue posible sincronizar Telegram. Código: TELEGRAM_SYNC_FAILED.');
 
             return Command::FAILURE;
         }
 
-        if (count($vinculadosNuevos) > 0) {
-            $this->info('Vinculaciones nuevas: '.implode(', ', $vinculadosNuevos));
+        if ($vinculadosNuevos > 0) {
+            $this->info('Sincronización completada. Vinculaciones nuevas: '.$vinculadosNuevos.'.');
         } else {
             $this->info('Sincronización completada. Ningún usuario nuevo vinculado.');
         }
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Enmascara el Chat ID para proteger la privacidad en logs operativos (OWASP A03).
+     */
+    private function maskChatId(string|int $chatId): string
+    {
+        $clean = (string) $chatId;
+        $len = strlen($clean);
+        if ($len <= 5) {
+            return '****';
+        }
+
+        return substr($clean, 0, 3).'***'.substr($clean, -2);
     }
 }

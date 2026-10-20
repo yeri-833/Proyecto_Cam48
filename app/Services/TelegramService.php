@@ -33,7 +33,7 @@ class TelegramService
         }
         $str = (string) $chatId;
         $len = strlen($str);
-        if ($len <= 4) {
+        if ($len <= 5) {
             return '****';
         }
 
@@ -133,8 +133,10 @@ class TelegramService
                     'success' => false,
                 ];
             }
-        } catch (\Exception $e) {
-            Log::error("[Telegram] [FALLIDO] Excepción de conexión: {$e->getMessage()}");
+        } catch (\Throwable $exception) {
+            Log::error('[TELEGRAM_SEND_FAILED] No fue posible completar el envío de Telegram.', [
+                'exception_type' => $exception::class,
+            ]);
 
             return [
                 'status' => 'Fallido',

@@ -48,6 +48,51 @@ class Personal extends Model
         return strtoupper($this->attributes['nombre_completo'] ?? '');
     }
 
+    /**
+     * Parsea y normaliza una asignación escolar de grado y grupo.
+     * Retorna array con ['grado' => string, 'grupo' => string] o null si es ambigua o inválida.
+     *
+     * @return array{grado: string, grupo: string}|null
+     */
+    public static function parseGradoGrupo(?string $gradoGrupo): ?array
+    {
+        if (empty($gradoGrupo)) {
+            return null;
+        }
+
+        $clean = trim($gradoGrupo);
+
+        // Formatos admitidos: '1° A', '1 A', '1°A', '1A', '1-A', '1 - A'
+        if (preg_match('/^(\d+)\s*°?\s*[-–—]?\s*([A-Za-z]+)$/u', $clean, $matches)) {
+            return [
+                'grado' => $matches[1],
+                'grupo' => strtoupper($matches[2]),
+            ];
+        }
+
+        return null;
+    }
+
+    /** @return array{grado: string, grupo: string}|null */
+    public static function verifiedAssignmentFor(User $user): ?array
+    {
+        if (! $user->isPersonal() || trim($user->email) === '') {
+            return null;
+        }
+
+        $fichas = static::where('email', $user->email)
+            ->where('activo', 1)
+            ->limit(2)
+            ->get(['grado_grupo']);
+
+        // Varias fichas activas no demuestran una asignación única.
+        if ($fichas->count() !== 1) {
+            return null;
+        }
+
+        return static::parseGradoGrupo($fichas->first()->grado_grupo);
+    }
+
     // Asistencias polimórficas (asistible_type, asistible_id)
     public function asistencias(): MorphMany
     {

@@ -1,0 +1,17 @@
+<Configuration>
+  <Networking>Disable</Networking>
+  <ClipboardRedirection>Disable</ClipboardRedirection>
+  <vGPU>Disable</vGPU>
+  <AudioInput>Disable</AudioInput>
+  <VideoInput>Disable</VideoInput>
+  <PrinterRedirection>Disable</PrinterRedirection>
+  <ProtectedClient>Enable</ProtectedClient>
+  <MemoryInMB>4096</MemoryInMB>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>C:\Users\YERALDI EMMMANUEL\AppData\Local\Temp\FamilyLock-Cam48-1D-20261016</HostFolder>
+      <SandboxFolder>C:\FamilyLockInput</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+</Configuration>

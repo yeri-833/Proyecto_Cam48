@@ -1,0 +1,13 @@
+# Solo mediante tests/Isolation/run.php: el cwd contiene el bootstrap aislado de Larastan.
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app
+    level: 5
+    disableMigrationScan: true
+    disableSchemaScan: true
+    enableMigrationCache: false
+    bootstrapFiles:
+        - tests/bootstrap.php

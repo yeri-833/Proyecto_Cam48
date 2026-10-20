@@ -132,7 +132,7 @@ class SeguridadYAutorizacionTest extends TestCase
             'nivel_educativo' => 'Primaria',
             'grado' => '3',
             'grupo' => 'A',
-            'curp' => 'GOMR800101HDFRRN01',
+            'curp' => 'CURP_FICTICIA_0001',
             'fecha_nacimiento' => '2015-05-20',
             'edad' => 11,
             'comentarios' => 'Alumno con excelente progreso.',

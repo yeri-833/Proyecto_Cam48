@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\Alumno;
 use App\Models\ArchivoSistema;
 use App\Models\User;
+use App\Policies\AlumnoPolicy;
 use App\Policies\ArchivoSistemaPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
@@ -28,6 +30,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Registro de Policies
         Gate::policy(ArchivoSistema::class, ArchivoSistemaPolicy::class);
+        Gate::policy(Alumno::class, AlumnoPolicy::class);
 
         // ─────────────────────────────────────────────────────────────
         // MATRIZ DE AUTORIZACIÓN POR ROLES Y OPERACIONES — FAMILYLOCK CAM #48
@@ -45,8 +48,8 @@ class AppServiceProvider extends ServiceProvider
 
         // 1. Módulo Alumnos
         Gate::define('alumnos.consultar', fn (User $user): bool => $user->isPersonal());
-        Gate::define('alumnos.crear', fn (User $user): bool => $user->isPersonal());
-        Gate::define('alumnos.actualizar', fn (User $user): bool => $user->isPersonal());
+        Gate::define('alumnos.crear', fn (User $user): bool => Gate::forUser($user)->allows('create', Alumno::class));
+        Gate::define('alumnos.actualizar', fn (User $user): bool => Gate::forUser($user)->allows('updateAny', Alumno::class));
         Gate::define('alumnos.eliminar', fn (User $user): bool => $user->isAdmin());
 
         // 2. Módulo Personal (Nómina y Directorio)

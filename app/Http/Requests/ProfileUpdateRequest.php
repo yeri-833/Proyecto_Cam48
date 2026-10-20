@@ -9,6 +9,14 @@ use Illuminate\Validation\Rule;
 
 class ProfileUpdateRequest extends FormRequest
 {
+    public function authorize(): bool
+    {
+        $user = $this->user();
+
+        // El correo enlaza la cuenta con su asignación institucional de personal.
+        return $user !== null && ($user->isAdmin() || $this->input('email') === $user->email);
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -24,7 +32,7 @@ class ProfileUpdateRequest extends FormRequest
                 'lowercase',
                 'email',
                 'max:255',
-                Rule::unique(User::class)->ignore($this->user()->id),
+                Rule::unique(User::class, 'correo')->ignore($this->user()->id),
             ],
         ];
     }
