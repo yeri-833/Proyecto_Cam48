@@ -29,7 +29,7 @@ if (getenv('FAMILYLOCK_ISOLATION_MODE') === 'phpunit') {
         exit(1);
     }
     $tool = $root.'/vendor/phpstan/phpstan/phpstan';
-    $arguments = [$tool, 'analyse', '--configuration', $runtime.'/phpstan.neon', '--debug', '--no-progress', '--memory-limit=512M'];
+    $arguments = [$tool, 'analyse', '--configuration', $runtime.'/phpstan.neon', '--debug', '--no-progress', '--error-format=raw', '--memory-limit=512M'];
 }
 
 $argv = $_SERVER['argv'] = $arguments;
