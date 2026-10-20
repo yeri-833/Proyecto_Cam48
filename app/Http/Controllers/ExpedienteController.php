@@ -4,20 +4,21 @@ namespace App\Http\Controllers;
 
 use App\Models\Alumno;
 use App\Models\ArchivoSistema;
-use App\Models\Personal;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class ExpedienteController extends Controller
 {
     /**
      * Muestra la vista del Expediente Digital con filtrado estricto según el alcance del usuario (OWASP A01).
      */
-    public function index(Request $request)
+    public function index(Request $request): Response
     {
         Gate::authorize('viewAny', ArchivoSistema::class);
 
@@ -26,49 +27,11 @@ class ExpedienteController extends Controller
         $busqueda = $request->query('busqueda', '');
 
         $query = ArchivoSistema::with('alumno');
-        $alumnosQuery = Alumno::where('activo', 1);
+        $alumnosQuery = Alumno::where('activo', 1)->accessibleTo($user);
 
         // Los docentes solo visualizan alumnos y expedientes de su grupo asignado
         if (! $user->isAdmin()) {
-            /** @var Personal|null $personal */
-            $personal = Personal::where('email', $user->email)
-                ->where('activo', 1)
-                ->first();
-
-            if (! $personal || empty($personal->grado_grupo)) {
-                // Denegación por defecto (fail-secure): sin asignación demostrable no se revela información
-                $query->whereRaw('0 = 1');
-                $alumnosQuery->whereRaw('0 = 1');
-            } else {
-                $gradoGrupo = trim($personal->grado_grupo);
-
-                $alumnosQuery->where(function ($q) use ($gradoGrupo) {
-                    $parts = preg_split('/\s+/', $gradoGrupo);
-                    if ($parts !== false && count($parts) === 2) {
-                        [$grado, $grupo] = $parts;
-                        $q->where(function ($sub) use ($grado, $grupo) {
-                            $sub->where('grado', $grado)->where('grupo', $grupo);
-                        })->orWhere(function ($sub) use ($grado, $grupo) {
-                            $sub->where('grado', str_replace('°', '', $grado))->where('grupo', $grupo);
-                        })->orWhere(function ($sub) use ($grado, $grupo) {
-                            $sub->where('grado', str_replace('°', '', $grado).'°')->where('grupo', $grupo);
-                        });
-                    } elseif (preg_match('/^(\d+°?)\s*([A-Za-z]+)$/u', $gradoGrupo, $matches)) {
-                        $grado = $matches[1];
-                        $grupo = $matches[2];
-                        $q->where(function ($sub) use ($grado, $grupo) {
-                            $sub->where('grado', $grado)->where('grupo', $grupo);
-                        })->orWhere(function ($sub) use ($grado, $grupo) {
-                            $sub->where('grado', str_replace('°', '', $grado))->where('grupo', $grupo);
-                        });
-                    } else {
-                        $q->where('grado', $gradoGrupo)->orWhere('grupo', $gradoGrupo);
-                    }
-                });
-
-                $matriculasAutorizadas = (clone $alumnosQuery)->pluck('matricula')->all();
-                $query->whereIn('matricula', $matriculasAutorizadas);
-            }
+            $query->whereHas('alumno', fn (Builder $alumnos): Builder => $alumnos->accessibleTo($user));
         }
 
         if (! empty($busqueda)) {

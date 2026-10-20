@@ -71,16 +71,6 @@ const form = useForm({
 });
 const matriculaSeleccionada = ref('');
 
-const normalizeNivel = (nivel) => {
-    if (!nivel) return '';
-    const n = nivel.toLowerCase();
-    if (n.includes('preescolar')) return 'Preescolar';
-    if (n.includes('primaria')) return 'Primaria';
-    if (n.includes('secundaria')) return 'Secundaria';
-    if (n.includes('laboral')) return 'Formación Laboral';
-    return nivel;
-};
-
 const abrirModalNuevo = () => {
     modoEdicion.value = false;
     form.clearErrors();
@@ -106,12 +96,14 @@ const abrirModalEditar = (alumno) => {
     modoEdicion.value = true;
     form.clearErrors();
     matriculaSeleccionada.value = alumno.matricula;
+    form.matricula = alumno.matricula;
     form.nombre = alumno.nombre;
     form.apellido = alumno.apellido;
+    form.sexo = alumno.sexo || 'M';
     form.curp = alumno.curp || '';
     form.fecha_nacimiento = alumno.fecha_nacimiento || '';
     form.edad = alumno.edad || '';
-    form.nivel_educativo = normalizeNivel(alumno.nivel_educativo);
+    form.nivel_educativo = alumno.nivel_educativo || '';
     form.grado = alumno.grado;
     form.grupo = alumno.grupo;
     form.discapacidad = alumno.discapacidad || '';
@@ -489,6 +481,7 @@ const guardarEdicion = () => {
                             <label class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">Nivel Educativo</label>
                             <select v-model="form.nivel_educativo" class="input-premium w-full cursor-pointer">
                                 <option value="">Seleccione nivel...</option>
+                                <option v-if="form.nivel_educativo && !['Preescolar', 'Primaria', 'Secundaria', 'Formación Laboral'].includes(form.nivel_educativo)" :value="form.nivel_educativo">{{ form.nivel_educativo }}</option>
                                 <option value="Preescolar">Preescolar</option>
                                 <option value="Primaria">Primaria</option>
                                 <option value="Secundaria">Secundaria</option>

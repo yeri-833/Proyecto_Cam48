@@ -6,6 +6,7 @@ use App\Models\Alumno;
 use App\Models\ArchivoSistema;
 use App\Models\Personal;
 use App\Models\User;
+use Illuminate\Support\Facades\Gate;
 
 class ArchivoSistemaPolicy
 {
@@ -40,40 +41,7 @@ class ArchivoSistemaPolicy
      */
     public function canAccessAlumno(User $user, Alumno $alumno): bool
     {
-        if ($user->isAdmin()) {
-            return true;
-        }
-
-        if (! $user->isPersonal()) {
-            return false;
-        }
-
-        /** @var Personal|null $personal */
-        $personal = Personal::where('email', $user->email)
-            ->where('activo', 1)
-            ->first();
-
-        if ($personal && ! empty($personal->grado_grupo)) {
-            $grupoAlumno = trim(($alumno->grado ?? '').' '.($alumno->grupo ?? ''));
-            $grupoAlumnoSinEspacio = trim(($alumno->grado ?? '').($alumno->grupo ?? ''));
-            $gradoGrupoDocente = trim($personal->grado_grupo);
-
-            if (
-                strcasecmp($gradoGrupoDocente, $grupoAlumno) === 0
-                || strcasecmp($gradoGrupoDocente, $grupoAlumnoSinEspacio) === 0
-            ) {
-                return true;
-            }
-
-            // Normalización para compatibilidad con símbolos de grado (ej. '1° A' vs '1A')
-            $docenteNorm = str_replace(['°', ' '], '', strtolower($gradoGrupoDocente));
-            $alumnoNorm = str_replace(['°', ' '], '', strtolower($grupoAlumnoSinEspacio));
-            if (! empty($docenteNorm) && $docenteNorm === $alumnoNorm) {
-                return true;
-            }
-        }
-
-        return false;
+        return Gate::forUser($user)->allows('view', $alumno);
     }
 
     /**
@@ -94,11 +62,7 @@ class ArchivoSistemaPolicy
             return $this->canAccessAlumno($user, $alumno);
         }
 
-        // Si no se especifica el alumno, debe tener ficha de personal docente activa con grupo asignado
-        /** @var Personal|null $personal */
-        $personal = Personal::where('email', $user->email)->where('activo', 1)->first();
-
-        return $personal !== null && ! empty($personal->grado_grupo);
+        return Personal::verifiedAssignmentFor($user) !== null;
     }
 
     /**

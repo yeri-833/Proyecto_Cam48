@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -56,6 +57,31 @@ class Alumno extends Model
     protected $casts = [
         'activo' => 'boolean',
     ];
+
+    /**
+     * @param  Builder<Alumno>  $query
+     * @return Builder<Alumno>
+     */
+    public function scopeAccessibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->isAdmin()) {
+            return $query;
+        }
+
+        $asignacion = Personal::verifiedAssignmentFor($user);
+        if ($asignacion === null) {
+            return $query->whereRaw('0 = 1');
+        }
+
+        // HEX evita equivalencias por acentos de la intercalación institucional.
+        return $query->where('alumnos.activo', 1)
+            ->whereRaw('HEX(TRIM(alumnos.grado)) IN (?, ?)', [
+                strtoupper(bin2hex($asignacion['grado'])),
+                strtoupper(bin2hex($asignacion['grado'].'°')),
+            ])
+            ->whereRaw('HEX(UPPER(TRIM(alumnos.grupo))) = ?', [strtoupper(bin2hex($asignacion['grupo']))])
+            ->whereRaw('HEX(LOWER(TRIM(alumnos.grupo))) = ?', [strtoupper(bin2hex(strtolower($asignacion['grupo'])))]);
+    }
 
     public function tutor(): HasOne
     {

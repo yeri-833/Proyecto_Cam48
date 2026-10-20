@@ -101,32 +101,47 @@ Route::middleware('auth')->group(function () {
 
     // Sincronización Segura de Telegram (Autenticada, con rate limiting y bloqueo atómico)
     Route::get('/telegram/sync', function () {
-        $lock = Cache::lock('telegram_sync_lock', 10);
-        if (! $lock->get()) {
-            return response()->json([
-                'status' => 'busy',
-                'message' => 'Sincronización en curso, por favor espere.',
-            ], 429);
-        }
-
+        $lock = null;
+        $lockAdquirido = false;
         try {
+            $lock = Cache::lock('telegram_sync_lock', 10);
+            $lockAdquirido = $lock->get();
+            if (! $lockAdquirido) {
+                return response()->json([
+                    'status' => 'busy',
+                    'message' => 'Sincronización en curso, por favor espere.',
+                ], 429);
+            }
+
             $exitCode = Artisan::call('telegram:sync');
-            $output = Artisan::output();
+            $mensaje = $exitCode === 0 ? 'Sincronización ejecutada correctamente' : 'No fue posible completar la sincronización';
 
             return response()->json([
                 'status' => $exitCode === 0 ? 'ok' : 'error',
-                'message' => $exitCode === 0 ? 'Sincronización ejecutada correctamente' : 'Error en la sincronización',
-                'output' => trim($output),
+                'message' => $mensaje,
+                'output' => $mensaje,
+                'code' => $exitCode === 0 ? 'TELEGRAM_SYNC_OK' : 'TELEGRAM_SYNC_FAILED',
             ]);
-        } catch (Exception $e) {
-            Log::error('Error en sincronización segura de Telegram: '.$e->getMessage());
+        } catch (Throwable $exception) {
+            Log::error('[TELEGRAM_SYNC_FAILED] No fue posible sincronizar Telegram.', [
+                'exception_type' => $exception::class,
+            ]);
 
             return response()->json([
                 'status' => 'error',
                 'message' => 'Ocurrió un error al sincronizar con Telegram',
+                'code' => 'TELEGRAM_SYNC_FAILED',
             ], 500);
         } finally {
-            $lock->release();
+            if ($lockAdquirido && $lock !== null) {
+                try {
+                    $lock->release();
+                } catch (Throwable $exception) {
+                    Log::error('[TELEGRAM_SYNC_LOCK_RELEASE_FAILED] No fue posible liberar el bloqueo de sincronización.', [
+                        'exception_type' => $exception::class,
+                    ]);
+                }
+            }
         }
     })->middleware(['can:telegram.sincronizar', 'throttle:20,1'])->name('telegram.sync');
 

@@ -4,15 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Models\Alumno;
 use App\Services\ImageUploadService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 
 class AlumnoController extends Controller
 {
-    public function store(Request $request, ImageUploadService $imageService)
+    public function store(Request $request, ImageUploadService $imageService): RedirectResponse
     {
-        Gate::authorize('alumnos.crear');
+        Gate::authorize('create', Alumno::class);
 
         $request->validate([
             'matricula' => 'required|string|unique:alumnos,matricula|max:20',
@@ -55,11 +57,27 @@ class AlumnoController extends Controller
         return redirect()->back()->with('success', 'Alumno registrado correctamente.');
     }
 
-    public function update(Request $request, $matricula, ImageUploadService $imageService)
+    public function update(Request $request, string $matricula, ImageUploadService $imageService): RedirectResponse
     {
-        Gate::authorize('alumnos.actualizar');
+        $alumno = Alumno::where('matricula', $matricula)->firstOrFail();
+        Gate::authorize('update', $alumno);
 
-        $request->validate([
+        $camposDeAsignacion = ['matricula', 'nivel_educativo', 'grado', 'grupo', 'activo', 'rol'];
+        $puedeAsignar = Gate::allows('updateAssignment', $alumno);
+        if (! $puedeAsignar) {
+            foreach ($request->only($camposDeAsignacion) as $campo => $valor) {
+                $esValorSimple = is_scalar($valor) || $valor === null;
+                $sinCambio = $esValorSimple && ($campo === 'activo'
+                    ? $request->boolean($campo) === $alumno->activo
+                    : trim((string) $valor) === trim((string) $alumno->getAttribute($campo)));
+
+                if (! $sinCambio) {
+                    Gate::authorize('updateAssignment', $alumno);
+                }
+            }
+        }
+
+        $validated = $request->validate([
             'nombre' => 'required|string|max:100',
             'apellido' => 'required|string|max:100',
             'sexo' => 'nullable|string|in:M,F',
@@ -75,27 +93,17 @@ class AlumnoController extends Controller
             'activo' => 'nullable|boolean',
         ]);
 
-        $alumno = Alumno::where('matricula', $matricula)->firstOrFail();
-
-        $data = [
-            'nombre' => strtoupper($request->nombre),
-            'apellido' => strtoupper($request->apellido),
-            'nivel_educativo' => $request->nivel_educativo,
-            'grado' => $request->grado,
-            'grupo' => $request->grupo,
-            'curp' => $request->curp ? strtoupper($request->curp) : null,
-            'fecha_nacimiento' => $request->fecha_nacimiento,
-            'edad' => $request->edad,
-            'comentarios' => $request->comentarios,
-            'discapacidad' => $request->discapacidad,
-        ];
-
-        if ($request->has('sexo')) {
-            $data['sexo'] = $request->sexo;
+        $data = Arr::except($validated, ['foto_perfil']);
+        $data['nombre'] = strtoupper($validated['nombre']);
+        $data['apellido'] = strtoupper($validated['apellido']);
+        if (array_key_exists('curp', $data) && $data['curp'] !== null) {
+            $data['curp'] = strtoupper($data['curp']);
         }
 
-        if ($request->has('activo')) {
-            $data['activo'] = (bool) $request->activo;
+        if (! $puedeAsignar) {
+            $data = Arr::except($data, $camposDeAsignacion);
+        } elseif (array_key_exists('activo', $data)) {
+            $data['activo'] = (bool) $data['activo'];
         }
 
         if ($request->hasFile('foto_perfil')) {
