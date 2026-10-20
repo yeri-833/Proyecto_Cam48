@@ -65,9 +65,12 @@ class TutorController extends Controller
         $data = [
             't1_nombre' => strtoupper($validated['t1_nombre']),
             't1_telefono' => $validated['t1_telefono'],
-            't1_email' => $validated['t1_email'] ?? null,
             't1_telegram_chat_id' => $validated['t1_telegram_chat_id'] ?? null,
         ];
+
+        if ($request->filled('t1_email')) {
+            $data['t1_email'] = $validated['t1_email'];
+        }
 
         // Verificar si el alumno ya tiene un tutor
         $tutorExistente = Tutor::where('matricula_alumno', $validated['matricula_alumno'])->first();
