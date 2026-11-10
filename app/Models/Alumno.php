@@ -88,15 +88,34 @@ class Alumno extends Model
         return $this->hasOne(Tutor::class, 'matricula_alumno', 'matricula');
     }
 
+    /**
+     * Tutores explícitamente vinculados a este alumno (tabla alumno_tutor).
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<Tutor, $this>
+     */
+    public function tutores(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Tutor::class, 'alumno_tutor', 'alumno_matricula', 'tutor_id', 'matricula', 'id')
+            ->withPivot(['parentesco', 'es_tutor_principal']);
+    }
+
     // Asistencias polimórficas (asistible_type, asistible_id)
     public function asistencias(): MorphMany
     {
         return $this->morphMany(RegistroAsistencia::class, 'asistible');
     }
 
+    /**
+     * Clave canónica de identidad familiar independiente del alumno.
+     */
+    public function getFamiliaKeyAttribute(): string
+    {
+        return app(\App\Services\FamiliaService::class)->obtenerClaveFamiliaAlumno($this);
+    }
+
     // Accessor para nombre completo
     public function getNombreCompletoAttribute(): string
     {
-        return strtoupper(trim(($this->nombre ?? '').' '.($this->apellido ?? '')));
+        return mb_strtoupper(trim(($this->nombre ?? '').' '.($this->apellido ?? '')), 'UTF-8');
     }
 }

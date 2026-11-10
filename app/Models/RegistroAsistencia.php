@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
@@ -34,14 +35,21 @@ class RegistroAsistencia extends Model
         'fecha',
         'hora',
         'modo_registro',
+        'evento_id',
     ];
 
     protected $casts = [
         'fecha' => 'date',
+        'evento_id' => 'integer',
     ];
 
     public function asistible(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    public function evento(): BelongsTo
+    {
+        return $this->belongsTo(Evento::class, 'evento_id');
     }
 }

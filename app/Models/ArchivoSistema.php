@@ -36,6 +36,7 @@ class ArchivoSistema extends Model
         'fecha_subida',
     ];
 
+    /** @return BelongsTo<Alumno, $this> */
     public function alumno(): BelongsTo
     {
         return $this->belongsTo(Alumno::class, 'matricula', 'matricula');
