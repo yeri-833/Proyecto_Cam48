@@ -72,6 +72,7 @@ final class SyntheticSchema
             $table->string('modo_registro')->nullable();
             $table->date('fecha');
             $table->time('hora');
+            $table->unsignedBigInteger('evento_id')->nullable();
             $table->timestamps();
         });
 
@@ -100,6 +101,42 @@ final class SyntheticSchema
             $table->string('email')->primary();
             $table->string('token');
             $table->timestamp('created_at')->nullable();
+        });
+
+        $schema->create('notificaciones_procesadas', function (Blueprint $table): void {
+            $table->id();
+            $table->string('idempotency_key')->unique();
+            $table->string('destinatario_tipo')->nullable();
+            $table->string('destinatario_id')->nullable();
+            $table->string('canal')->nullable();
+            $table->string('estado')->default('PENDIENTE');
+            $table->unsignedInteger('intentos')->default(0);
+            $table->text('ultimo_error')->nullable();
+            $table->timestamp('fecha_entrega')->nullable();
+            $table->timestamps();
+        });
+
+        $schema->create('alumno_tutor', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('tutor_id');
+            $table->string('alumno_matricula');
+            $table->string('parentesco')->nullable();
+            $table->boolean('es_tutor_principal')->default(true);
+            $table->timestamps();
+            $table->unique(['tutor_id', 'alumno_matricula']);
+        });
+
+        $schema->create('evento_convocatorias', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('evento_id');
+            $table->unsignedBigInteger('tutor_id');
+            $table->string('alumno_matricula')->nullable();
+            $table->string('canal_notificacion')->nullable();
+            $table->boolean('notificado')->default(false);
+            $table->boolean('asistio')->default(false);
+            $table->timestamp('fecha_asistencia')->nullable();
+            $table->timestamps();
+            $table->unique(['evento_id', 'tutor_id']);
         });
     }
 }
