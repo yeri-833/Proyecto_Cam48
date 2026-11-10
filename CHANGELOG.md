@@ -2,6 +2,66 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo. El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [SemVer (Versionamiento Semántico)](https://semver.org/lang/es/).
 
+## [1.4.8] - 2026-11-08
+
+### Seguridad y Consolidación Crítica
+- **Servicio de Dominio de Identidad Familiar (`FamiliaService`)**: Desacoplamiento matemático y determinista entre la persona física del tutor y la unidad familiar escolar (`FAM:MAT-001,MAT-002`). La clave canónica familiar se deriva de los grafos conexos de alumnos hermanos en `alumno_tutor`, garantizando que homónimos, tutores con múltiples hijos y familias que comparten líneas telefónicas mantengan un aislamiento absoluto de identidades sin duplicación de métricas.
+- **Preservación Integral de Datos en Alumnos**: Corrección del contrato entre backend y frontend en `DashboardController`, `Dashboard.vue` y `AlumnoController`. Se garantiza la transmisión íntegra de CURP, fecha de nacimiento, edad, comentarios y fotografía, evitando la anulación accidental de registros históricos ante ediciones parciales o campos omitidos.
+- **Mecanismo de Borrado Explícito Protegido**: Soporte para actualización y borrado explícito de campos sensibles mediante banderas autorizadas (`borrar_curp`, `borrar_comentarios`, etc.), distinguiendo valores vacíos artificiales de intenciones de borrado genuinas.
+- **Protección de Instalación y Claves de Cifrado**: Blindaje del script `composer setup` para prevenir la sobreescritura accidental de `APP_KEY` con `key:generate` en despliegues existentes (lo que provocaría la invalidación de firmas HMAC de credenciales QR), y sustitución de `--force` por migraciones gráciles.
+- **Idempotencia Durable en Notificaciones Multicanal (`notificaciones_procesadas`)**: Implementación de una tabla dedicada con restricción `UNIQUE(idempotency_key)` y clave compuesta determinista en base de datos (`2026_11_07_000001_create_notificaciones_procesadas_table.php`). Se sustituyó la caché volátil en `NotificarAvisoPersonalJob`, `NotificarAsistenciaJob` y `NotificarEventoTutorJob` por una reserva atómica transaccional (`insertOrIgnore`), seguimiento de estados del ciclo de vida (`PENDIENTE`, `EN_PROCESO`, `ENTREGADO`, `FALLIDO`), reintentos ante fallos transitorios, trazabilidad de fallos terminales vía método `failed()`, y recuperación de bloqueos zombi (`EN_PROCESO` abandonados $\ge 5$ minutos) ante caídas o reinicios del worker.
+- **Identificación Estricta y Desacoplamiento de Tutores (`alumno_tutor`)**: Creación de la tabla relacional `alumno_tutor` (`2026_11_08_000000_create_alumno_tutor_table.php`) con restricción `UNIQUE(tutor_id, alumno_matricula)` y claves foráneas en cascada. Permite a un tutor vincularse explícitamente a múltiples alumnos sin depender de heurísticas basadas en nombres, teléfonos o correos electrónicos, garantizando aislamiento de identidades individuales para homónimos y familias que comparten líneas telefónicas.
+- **Gestión Completa de Convocatorias a Eventos (`evento_convocatorias`)**: Migración `2026_11_08_000001_create_evento_convocatorias_table.php` con restricción `UNIQUE(evento_id, tutor_id)`. Vincula formalmente a los tutores convocados para cada junta escolar, registrando la confirmación de asistencia en el escaneo de QR y evitando que se considere automáticamente a toda la matrícula activa de la escuela como convocada. Endpoints dedicados en `EventoController`: `convocatorias`, `convocar`, `desconvocar`, y `asistenciaManual`.
+
+### Control de Asistencia y Participación de Padres/Tutores
+- **Administración de Convocatorias en `EventoController`**:
+  - `GET /eventos/{id}/convocatorias`: Consulta tipada del listado de tutores convocados con estado de notificación y asistencia.
+  - `POST /eventos/{id}/convocar`: Convocatoria selectiva individual o masiva por grupo/grado de tutores con canal de notificación.
+  - `DELETE /eventos/{id}/convocar/{tutorId}`: Desconvocatoria segura sin alterar registros de asistencia previos.
+  - `POST /eventos/{id}/asistencia-manual/{tutorId}`: Registro manual de asistencia presencial respaldada en auditoría.
+- **Gestión de Vinculación de Hermanos en `TutorController`**:
+  - `POST /tutores/{id}/vincular-alumno`: Vinculación explícita de un alumno adicional a un tutor existente en `alumno_tutor`.
+  - `DELETE /tutores/{id}/desvincular-alumno/{matricula}`: Desvinculación de alumnos manteniendo la consistencia de tutor principal.
+  - Sincronización automática de alumnos adicionales durante el registro inicial (`store`).
+- **Registro Asistencial Enriquecido (`AsistenciaController`)**: Soporte para tutores no convocados previamente (asistencia *walk-in*), vinculación atómica en `evento_convocatorias` con bandera `asistio = true`, y respuesta al operador con desglose de alumnos representados (`alumnos_vinculados`).
+- **Distinción Estricta de Familias y Denominador Real (`EstadisticasController`)**: Integración directa con `FamiliaService` para resolver identidades canónicas. Si un evento cuenta con tutores convocados registrados, el denominador de porcentaje de participación es estrictamente el total de tutores convocados para dicho evento, no el censo global de alumnos. Para eventos históricos generales, aplica la agrupación normalizada por clave compuesta sin inflar métricas.
+- **Métricas Separadas de Convocatoria y Asistencia**: Distinción matemática explícita entre:
+  - **A. Familias convocadas**: Conteo de familias o tutores formalmente convocados para el evento.
+  - **B. Familias asistentes**: Familias únicas con asistencia confirmada.
+  - **C. Tutores asistentes**: Tutores únicos que asistieron presencialmente.
+  - **D. Ranking individual de tutores**: Puntuación acumulativa basada estrictamente en asistencias reales validadas (+1 por cada evento distinto), deduplicando lecturas de QR para la misma sesión.
+- **Relaciones Eloquent Bidireccionales**:
+  - `Tutor::alumnos()`: Relación `belongsToMany(Alumno::class, 'alumno_tutor')`.
+  - `Alumno::tutores()`: Relación `belongsToMany(Tutor::class, 'alumno_tutor')`.
+  - `Evento::convocatorias()`: Relación `hasMany(EventoConvocatoria::class)`.
+  - `Evento::tutoresConvocados()`: Relación `belongsToMany(Tutor::class, 'evento_convocatorias')`.
+- **Normalización Multibyte UTF-8 en Nombres**: Adopción de `mb_strtoupper(..., 'UTF-8')` en los accessors `getNombreCompletoAttribute` de `Alumno` y `Tutor`, preservando acentos y caracteres de la lengua española en visualización y reportes.
+- **Trazabilidad de Tutor y Alumno Relacionado en Historial**: Integración del alumno vinculado (`alumno_relacionado`) en las consultas de `HistorialController` y en la exportación de reportes CSV, permitiendo identificar de forma inmediata qué estudiante representa cada tutor en asistencias a eventos y juntas.
+- **Migración Robusta de Eventos (`add_evento_id`)**: Migración `2026_11_07_000000_add_evento_id_to_registros_asistencia_table.php` con clave foránea `fk_registros_asistencia_evento_id` (`nullOnDelete`), índice `idx_registros_asistencia_evento_id`, idempotencia ante reejecución y rollback compatible con MariaDB/MySQL y SQLite.
+- **Persistencia y Validación de Correo de Tutores**: Incorporación de `'t1_email'` en el modelo `Tutor` y preservación del correo electrónico ante ediciones sin modificar en `TutorController`.
+- **Tipado Estricto de Clave Primaria en Personal (`Personal.php`)**: Declaración explícita de `public $incrementing = false;` y `protected $keyType = 'string';` para alinear el modelo con su definición de identificador de nómina en la base de datos institucional.
+
+### Validación Exhaustiva en Entorno Aislado y Windows Sandbox
+- **Validación en Motor MariaDB Real Aislado (Puerto 3307)**:
+  - Servicio dedicado `MariaDBSynthetic` (MariaDB 12.3.2) ejecutado dentro del Sandbox.
+  - Verificación integral de 6 etapas: instalación limpia de todas las tablas v1.4.8, actualización sobre esquema v1.4.7 con preservación de registros históricos, aplicación de restricciones `UNIQUE` y claves foráneas (`CASCADE` y `SET NULL`), idempotencia ante reejecuciones, simulación concurrente atómica de workers (`insertOrIgnore`) y reversibilidad de rollback `down()` (23 aserciones, 100% PASS).
+- **Cobertura de Participación de Tutores (`TutoresAsistenciaParticipacionTest`)**:
+  - Verificación de 16 escenarios: tutor con múltiples hijos vía `alumno_tutor`, tutores homónimos con diferente contacto, familias que comparten teléfono, correos distintos, asistencias a múltiples juntas escolares, rechazo de asistencias duplicadas por evento, ranking individual por asistencias reales, distinción entre familias convocadas/asistentes y tutores asistentes, cálculo exacto del denominador de convocatorias, sincronización en `TutorController@store`, vinculación/desvinculación de hermanos y registro de asistencia manual (16 pruebas, 173 aserciones, 100% PASS).
+- **Cobertura de Mensajería Asíncrona e Idempotencia (`NotificacionesPersonalAsincronasTest` y `NotificacionesResilienciaTest`)**:
+  - Pruebas con colas simuladas, validación de autorización RBAC, persistencia durable en tabla `notificaciones_procesadas`, deduplicación de solicitudes concurrentes idénticas, reintentos ante excepciones, recuperación tras reinicio de workers, liberación de registros zombi en proceso por más de 5 minutos, confirmación de no-repetición de mensajes en canales previos ante reintentos de workers y registro terminal `FALLIDO` con trazabilidad (15 pruebas, 46 aserciones, 100% PASS).
+- **Auditoría y Suite Completa de Exportación (`HistorialExportacionTest`)**: Reconstrucción y expansión en 30 pruebas paramétricas utilizando 5 DataProviders para verificar cabeceras MIME, orden cronológico descendente, sanitización CSV (comas, comillas dobles, BOM UTF-8), chunking, filtros por rol y matriz RBAC de autorización (30 pruebas, 233 aserciones, 100% PASS).
+- **Validación de Migración `add_evento_id` (`EventoMigrationTest`)**: Verificación aislada de instalación limpia, actualización sobre base existente v1.4.7, preservación íntegra de datos históricos, idempotencia y reversibilidad rollback con clave foránea e índices (1 prueba, 8 aserciones, 100% PASS).
+- **Cobertura de Preservación de Alumnos (`AlumnosPreservacionDatosTest`)**: Pruebas que validan la entrega completa de atributos en el Dashboard, la inmutabilidad ante payloads vacíos artificiales y el soporte de borrado explícito (5 pruebas, 49 aserciones, 100% PASS).
+- **Validación de Seguridad de Scripts Composer (`ComposerScriptSecurityTest`)**: Comprobación automatizada de no-regeneración de `APP_KEY` institucional y ausencia de comandos destructivos en actualización (2 pruebas, 7 aserciones, 100% PASS).
+- **Cobertura de Regresiones Anteriores**:
+  - `EscaneoSeguridadTest`: 3 pruebas, 6 aserciones (100% PASS).
+  - `TelegramSalidasSegurasTest`: 16 pruebas, 199 aserciones (100% PASS).
+  - `TutorCorreoPersistenciaTest`: 10 pruebas, 49 aserciones (100% PASS).
+  - `IsolatedHttpTransportTest`: 3 pruebas, 6 aserciones (100% PASS).
+- **Resumen Global de Ejecución Dinámica del Proyecto**: 223 pruebas ejecutadas, 1240 aserciones, 0 fallos, 0 errores (100% PASS en arnés aislado de Windows Sandbox).
+
+---
+
 ## [1.4.7] - 2026-10-19
 
 ### Seguridad
