@@ -197,7 +197,7 @@ class NotificacionesResilienciaTest extends TestCase
     }
 
     /**
-     * Demostración sistemática del problema de duplicación si un Job se reejecuta sin idempotencia duradera.
+     * Verificación de que la idempotencia duradera previene la repetición de mensajes en canales previos ante reintentos.
      */
     public function test_demostracion_de_reintento_sin_deduplicacion_repite_mensajes_en_canales_previos(): void
     {
@@ -237,8 +237,8 @@ class NotificacionesResilienciaTest extends TestCase
         $this->assertSame(1, $whatsappCalls, 'WhatsApp debe haberse ejecutado 1 vez en el intento 1.');
 
         // Simulación de reintento del worker (Intento 2):
-        // Al carecer de registro duradero de canal completado, WhatsApp se ejecuta por segunda vez
+        // Con la tabla notificaciones_procesadas e idempotencia duradera, WhatsApp no se repite
         $job->handle(new WhatsAppService, new TelegramService);
-        $this->assertSame(2, $whatsappCalls, 'Demostración confirmada: En el intento 2, WhatsApp se ejecutó nuevamente.');
+        $this->assertSame(1, $whatsappCalls, 'Idempotencia confirmada: En el intento 2, WhatsApp no se ejecutó nuevamente.');
     }
 }
