@@ -4,6 +4,19 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 ## [1.4.8] - 2026-11-08
 
+### Limpieza Integral, Optimización y Estandarización Profesional
+- **Jerarquía Oficial de Documentación (`docs/`)**: Reestructuración completa de los documentos técnicos en directorios especializados (`architecture/`, `database/`, `development/`, `security/`, `testing/`, `operations/`, `api/`, `historical/`), trasladando archivos históricos sueltos de la raíz del proyecto a `docs/historical/agent_phases/` y `docs/historical/superpowers/`.
+- **Auditoría y Retiro de Dependencias Innecesarias (`@tailwindcss/vite`)**: Verificación y desinstalación controlada de `@tailwindcss/vite` mediante `npm uninstall` en entorno Sandbox, actualizando limpiamente `package-lock.json` y confirmando la correcta compilación de producción de Vite mediante PostCSS y Tailwind CSS v3.
+- **Optimización de Recursos Gráficos Públicos**:
+  - Detección y eliminación del duplicado idéntico `public/isotipo-cam-512.png` (SHA-256 coincidente con `public/icono-512.png`), preservando el estándar PWA en `manifest.json`.
+  - Reubicación y archivo del master ráster institucional sin comprimir `public/Logo del CAM.png` (7.0 MB) hacia `docs/historical/branding/Logo_del_CAM_original.png`, eliminando peso innecesario en la carpeta pública servible y estandarizando el uso de los logotipos vectoriales SVG oficiales (`logo-claro.svg`, `logo-oscuro.svg`, `logo-horizontal-*.svg`).
+- **Estandarización de Herramientas de IA y Configuraciones Portables**:
+  - Estandarización de `.agents/mcp_config.json` sustituyendo rutas absolutas del host (`C:\php\php.exe`) por el ejecutable portable `php`, y creación de la plantilla genérica `.agents/mcp_config.example.json`.
+  - Corrección de `AGENTS.md` eliminando invocaciones rígidas a ejecutables de disco (`C:\php\php.exe artisan`).
+  - Clasificación formal de las 29 habilidades en `docs/development/ai_skills_and_agents.md`.
+- **Plantillas de Configuración de Entorno (`.env.example`)**: Estandarización de `APP_NAME="FamilyLock"`, locales en español (`es`), y adición de variables para credenciales iniciales de administrador institucional sin exponer secretos.
+- **Verificación Dinámica y Estática 100% PASS**: Validación ejecutada estrictamente dentro de Windows Sandbox: 223 pruebas de PHPUnit aprobadas (1,240 aserciones, 0 fallos), 0 errores en análisis estático Larastan / PHPStan, y compilación limpia de Vite en 2.23s.
+
 ### Seguridad y Consolidación Crítica
 - **Servicio de Dominio de Identidad Familiar (`FamiliaService`)**: Desacoplamiento matemático y determinista entre la persona física del tutor y la unidad familiar escolar (`FAM:MAT-001,MAT-002`). La clave canónica familiar se deriva de los grafos conexos de alumnos hermanos en `alumno_tutor`, garantizando que homónimos, tutores con múltiples hijos y familias que comparten líneas telefónicas mantengan un aislamiento absoluto de identidades sin duplicación de métricas.
 - **Preservación Integral de Datos en Alumnos**: Corrección del contrato entre backend y frontend en `DashboardController`, `Dashboard.vue` y `AlumnoController`. Se garantiza la transmisión íntegra de CURP, fecha de nacimiento, edad, comentarios y fotografía, evitando la anulación accidental de registros históricos ante ediciones parciales o campos omitidos.
