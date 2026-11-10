@@ -7,7 +7,9 @@ use App\Models\Tutor;
 use App\Services\ImageUploadService;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -65,9 +67,12 @@ class TutorController extends Controller
         $data = [
             't1_nombre' => strtoupper($validated['t1_nombre']),
             't1_telefono' => $validated['t1_telefono'],
-            't1_email' => $validated['t1_email'] ?? null,
             't1_telegram_chat_id' => $validated['t1_telegram_chat_id'] ?? null,
         ];
+
+        if ($request->filled('t1_email')) {
+            $data['t1_email'] = $validated['t1_email'];
+        }
 
         // Verificar si el alumno ya tiene un tutor
         $tutorExistente = Tutor::where('matricula_alumno', $validated['matricula_alumno'])->first();
@@ -82,14 +87,101 @@ class TutorController extends Controller
 
         if ($tutorExistente) {
             $tutorExistente->update($data);
+            $tutor = $tutorExistente;
             $msg = 'Información del tutor actualizada.';
         } else {
             $data['matricula_alumno'] = $validated['matricula_alumno'];
-            Tutor::create($data);
+            $tutor = Tutor::create($data);
             $msg = 'Tutor asignado correctamente al alumno.';
         }
 
+        // Sincronizar relación explícita N:M en alumno_tutor
+        if (Schema::hasTable('alumno_tutor')) {
+            DB::table('alumno_tutor')->updateOrInsert(
+                [
+                    'tutor_id' => $tutor->id,
+                    'alumno_matricula' => $validated['matricula_alumno'],
+                ],
+                [
+                    'es_tutor_principal' => true,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+
+            // Si se envían alumnos adicionales vinculados (familia con múltiples hijos)
+            if ($request->has('alumnos_adicionales') && is_array($request->input('alumnos_adicionales'))) {
+                foreach ($request->input('alumnos_adicionales') as $matAdicional) {
+                    if (! empty($matAdicional) && Alumno::where('matricula', $matAdicional)->exists()) {
+                        DB::table('alumno_tutor')->updateOrInsert(
+                            [
+                                'tutor_id' => $tutor->id,
+                                'alumno_matricula' => $matAdicional,
+                            ],
+                            [
+                                'es_tutor_principal' => false,
+                                'updated_at' => now(),
+                                'created_at' => now(),
+                            ]
+                        );
+                    }
+                }
+            }
+        }
+
         return redirect()->route('tutores.index')->with('success', $msg);
+    }
+
+    /**
+     * Vincula explícitamente un alumno adicional a este tutor (soporte para hermanos/familias).
+     */
+    public function vincularAlumno(Request $request, $id)
+    {
+        Gate::authorize('tutores.actualizar');
+
+        $validated = $request->validate([
+            'alumno_matricula' => 'required|exists:alumnos,matricula',
+            'parentesco' => 'nullable|string|max:100',
+            'es_tutor_principal' => 'nullable|boolean',
+        ]);
+
+        $tutor = Tutor::findOrFail($id);
+
+        if (Schema::hasTable('alumno_tutor')) {
+            DB::table('alumno_tutor')->updateOrInsert(
+                [
+                    'tutor_id' => $tutor->id,
+                    'alumno_matricula' => $validated['alumno_matricula'],
+                ],
+                [
+                    'parentesco' => $validated['parentesco'] ?? $tutor->t1_parentesco ?? 'TUTOR',
+                    'es_tutor_principal' => (bool) ($validated['es_tutor_principal'] ?? false),
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+        }
+
+        return redirect()->back()->with('success', 'Alumno vinculado exitosamente al tutor.');
+    }
+
+    /**
+     * Remueve el vínculo entre un tutor y un alumno específico.
+     */
+    public function desvincularAlumno($id, $matricula)
+    {
+        Gate::authorize('tutores.actualizar');
+
+        $tutor = Tutor::findOrFail($id);
+
+        if (Schema::hasTable('alumno_tutor')) {
+            DB::table('alumno_tutor')
+                ->where('tutor_id', $tutor->id)
+                ->where('alumno_matricula', $matricula)
+                ->delete();
+        }
+
+        return redirect()->back()->with('success', 'Vínculo tutor-alumno removido.');
     }
 
     /**

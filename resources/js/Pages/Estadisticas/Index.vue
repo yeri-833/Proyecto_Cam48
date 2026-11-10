@@ -25,6 +25,10 @@ const props = defineProps({
     rankingTutores: {
         type: Array,
         default: () => [],
+    },
+    participacionEventos: {
+        type: Array,
+        default: () => [],
     }
 });
 
@@ -413,6 +417,43 @@ const doughnutOptions = computed(() => ({
                     </div>
                 </div>
 
+            </div>
+
+            <!-- Participación en Juntas y Eventos Escolares -->
+            <div v-if="participacionEventos && participacionEventos.length > 0" class="premium-card-static overflow-hidden mb-8 animate-fade-in-up" style="animation-delay: 240ms;">
+                <div class="p-5 sm:p-6 border-b border-slate-200/70 dark:border-white/[0.08] flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900/40">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-11 h-11 rounded-2xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center text-lg shrink-0 shadow-sm border border-sky-500/20">
+                            <i class="fas fa-calendar-check"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-display font-black text-lg text-slate-900 dark:text-white">
+                                Asistencia a Juntas y Eventos
+                            </h2>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                Comparativa de tutores convocados vs asistentes registrados.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div v-for="evento in participacionEventos" :key="evento.id" class="p-4 rounded-2xl border border-slate-200/70 dark:border-white/10 bg-white/60 dark:bg-slate-800/60 shadow-sm">
+                        <div class="flex justify-between items-start gap-2">
+                            <h3 class="font-bold text-xs text-slate-800 dark:text-slate-100 uppercase line-clamp-1">{{ evento.nombre }}</h3>
+                            <span class="text-[10px] font-mono text-slate-400 shrink-0">{{ evento.fecha }}</span>
+                        </div>
+                        <div class="mt-3 flex items-baseline justify-between">
+                            <span class="text-2xl font-black text-slate-900 dark:text-white font-mono">{{ evento.asistentes }} <span class="text-xs font-normal text-slate-400">/ {{ evento.convocados }} tutores</span></span>
+                            <span class="font-bold text-xs px-2 py-0.5 rounded-md" :class="evento.porcentaje >= 70 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'">
+                                {{ evento.porcentaje }}% asistencia
+                            </span>
+                        </div>
+                        <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 mt-2 overflow-hidden">
+                            <div class="bg-primary h-1.5 rounded-full transition-all duration-500" :style="{ width: `${evento.porcentaje}%` }"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Top Parents Ranking Table -->

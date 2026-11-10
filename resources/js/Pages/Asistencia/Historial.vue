@@ -255,6 +255,10 @@ const roles = [
                                     <p class="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase">
                                         {{ reg.nombre_completo }}
                                     </p>
+                                    <p v-if="reg.rol === 'Tutor' && reg.alumno_relacionado" class="text-[11px] text-sky-600 dark:text-sky-400 font-semibold mt-0.5 flex items-center gap-1">
+                                        <i class="fas fa-child text-[10px]"></i>
+                                        <span>Alumno: {{ reg.alumno_relacionado }}</span>
+                                    </p>
                                 </td>
                                 <td>
                                     <span class="badge" :class="getColorRol(reg.rol)">

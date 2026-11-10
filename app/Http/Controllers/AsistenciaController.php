@@ -9,6 +9,7 @@ use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -163,6 +164,22 @@ class AsistenciaController extends Controller
                 ]);
             }
 
+            // Restricción estricta contra registros duplicados en el mismo evento
+            if ($request->filled('evento_id') && self::tieneColumnaAsistencia('evento_id')) {
+                $eventoId = (int) $request->input('evento_id');
+                $yaAsistioEvento = $personaModel->asistencias()
+                    ->where('evento_id', $eventoId)
+                    ->exists();
+
+                if ($yaAsistioEvento) {
+                    return response()->json([
+                        'status' => 'warning',
+                        'msg' => 'Asistencia ya registrada previamente para este evento escolar.',
+                        'persona' => $nombreCompleto,
+                    ]);
+                }
+            }
+
             // Cooldown de 5 minutos para evitar duplicados accidentales
             /** @var RegistroAsistencia|null $ultimoRegistro */
             $ultimoRegistro = $personaModel->asistencias()
@@ -201,8 +218,37 @@ class AsistenciaController extends Controller
             if (self::tieneColumnaAsistencia('rol')) {
                 $asistenciaData['rol'] = $rol;
             }
+            if ($request->filled('evento_id') && self::tieneColumnaAsistencia('evento_id')) {
+                $asistenciaData['evento_id'] = (int) $request->input('evento_id');
+            }
 
-            $personaModel->asistencias()->create($asistenciaData);
+            $asistenciaCreada = $personaModel->asistencias()->create($asistenciaData);
+
+            // Actualizar convocatoria explícita si la tabla existe
+            if ($rol === 'Tutor' && isset($asistenciaData['evento_id']) && Schema::hasTable('evento_convocatorias')) {
+                $affected = DB::table('evento_convocatorias')
+                    ->where('evento_id', $asistenciaData['evento_id'])
+                    ->where('tutor_id', $personaModel->id)
+                    ->update([
+                        'asistio' => true,
+                        'fecha_asistencia' => Carbon::now(),
+                        'updated_at' => Carbon::now(),
+                    ]);
+
+                if ($affected === 0) {
+                    // Tutor asistente no convocado previamente (walk-in): registrar para cálculo exacto
+                    DB::table('evento_convocatorias')->insertOrIgnore([
+                        'evento_id' => $asistenciaData['evento_id'],
+                        'tutor_id' => $personaModel->id,
+                        'alumno_matricula' => $personaModel->matricula_alumno,
+                        'notificado' => false,
+                        'asistio' => true,
+                        'fecha_asistencia' => Carbon::now(),
+                        'created_at' => Carbon::now(),
+                        'updated_at' => Carbon::now(),
+                    ]);
+                }
+            }
 
             // =========== ALERTAS AUTOMÁTICAS (WHATSAPP + TELEGRAM) ===========
             if ($rol === 'Alumno' && isset($alumno) && $alumno->tutor) {
@@ -217,17 +263,28 @@ class AsistenciaController extends Controller
                 );
 
                 $msgResponse = 'Asistencia registrada (notificación en cola)';
+            } elseif ($rol === 'Tutor') {
+                $nombresAlumnos = $personaModel->nombres_alumnos;
+                $msgResponse = ! empty($nombresAlumnos)
+                    ? "Asistencia registrada correctamente. Familia de: {$nombresAlumnos}."
+                    : 'Asistencia de tutor registrada correctamente.';
             } else {
                 $msgResponse = 'Asistencia registrada';
             }
             // ==========================================
 
-            return response()->json([
+            $responsePayload = [
                 'status' => 'success',
                 'msg' => $msgResponse,
                 'persona' => $nombreCompleto,
                 'hora' => Carbon::now()->format('h:i A'),
-            ]);
+            ];
+
+            if ($rol === 'Tutor' && ! empty($personaModel->nombres_alumnos)) {
+                $responsePayload['alumnos_vinculados'] = $personaModel->nombres_alumnos;
+            }
+
+            return response()->json($responsePayload);
 
         } catch (\Exception $e) {
             Log::error('Error en procesarQr: '.$e->getMessage(), ['id' => (string) $idPersona]);

@@ -31,11 +31,12 @@ class HistorialController extends Controller
     ];
 
     /**
-     * Base query usando el esquema polimórfico (asistible_type / asistible_id).
+     * Base query usando el esquema polimórfico (asistible_type / asistible_id)
+     * e integrando la relación de tutores con sus alumnos asociados.
      */
     private function getBaseQuery(string $fecha, string $busqueda, string $rol)
     {
-        // Unimos las tres tablas de personas según asistible_type
+        // Unimos las tres tablas de personas según asistible_type y la relación tutor-alumno
         $query = DB::table('registros_asistencia as r')
             ->leftJoin('alumnos as a', function ($join) {
                 $join->on('r.asistible_id', '=', 'a.matricula')
@@ -49,6 +50,7 @@ class HistorialController extends Controller
                 $join->on('r.asistible_id', '=', DB::raw('CAST(t.id AS CHAR)'))
                     ->where('r.asistible_type', '=', Tutor::class);
             })
+            ->leftJoin('alumnos as a_tutor', 't.matricula_alumno', '=', 'a_tutor.matricula')
             ->whereDate('r.fecha', $fecha);
 
         // Filtro de rol
@@ -56,14 +58,17 @@ class HistorialController extends Controller
             $query->where('r.asistible_type', self::ROL_TO_TYPE[$rol]);
         }
 
-        // Búsqueda por nombre o ID
+        // Búsqueda por nombre, ID o alumno relacionado
         if (! empty($busqueda)) {
             $query->where(function ($q) use ($busqueda) {
                 $q->where('r.asistible_id', 'LIKE', "%{$busqueda}%")
                     ->orWhere('a.nombre', 'LIKE', "%{$busqueda}%")
                     ->orWhere('a.apellido', 'LIKE', "%{$busqueda}%")
                     ->orWhere('p.nombre_completo', 'LIKE', "%{$busqueda}%")
-                    ->orWhere('t.t1_nombre', 'LIKE', "%{$busqueda}%");
+                    ->orWhere('t.t1_nombre', 'LIKE', "%{$busqueda}%")
+                    ->orWhere('a_tutor.nombre', 'LIKE', "%{$busqueda}%")
+                    ->orWhere('a_tutor.apellido', 'LIKE', "%{$busqueda}%")
+                    ->orWhere('t.matricula_alumno', 'LIKE', "%{$busqueda}%");
             });
         }
 
@@ -79,7 +84,7 @@ class HistorialController extends Controller
     }
 
     /**
-     * Retorna la expresión SQL para el nombre completo.
+     * Retorna la expresión SQL para el nombre completo de la persona que asiste.
      */
     private function getNombreCompletoSql(): string
     {
@@ -92,6 +97,20 @@ class HistorialController extends Controller
         }
 
         return "COALESCE({$alumnoName}, p.nombre_completo, t.t1_nombre, r.asistible_id) as nombre_completo";
+    }
+
+    /**
+     * Retorna la expresión SQL para el nombre del alumno representado por el tutor.
+     */
+    private function getAlumnoRelacionadoSql(): string
+    {
+        $driver = DB::connection()->getDriverName();
+
+        if ($driver === 'sqlite') {
+            return "NULLIF(TRIM(COALESCE(a_tutor.nombre, '') || ' ' || COALESCE(a_tutor.apellido, '')), '') as alumno_relacionado";
+        }
+
+        return "NULLIF(TRIM(CONCAT(COALESCE(a_tutor.nombre, ''), ' ', COALESCE(a_tutor.apellido, ''))), '') as alumno_relacionado";
     }
 
     /**
@@ -123,7 +142,7 @@ class HistorialController extends Controller
             $estadisticas['total'] += $count;
         }
 
-        // ── Registros paginados ────────────────────────────────────
+        // ── Registros paginados con alumno relacionado ──────────────
         $query = $this->getBaseQuery($fecha, $busqueda, $rol);
 
         $registros = $query->select(
@@ -132,7 +151,9 @@ class HistorialController extends Controller
             'r.asistible_type',
             'r.fecha',
             'r.hora',
-            DB::raw($this->getNombreCompletoSql())
+            't.matricula_alumno',
+            DB::raw($this->getNombreCompletoSql()),
+            DB::raw($this->getAlumnoRelacionadoSql())
         )
             ->orderBy('r.hora', 'desc')
             ->paginate(50)
@@ -141,6 +162,9 @@ class HistorialController extends Controller
                 $registro->hora_formateada = Carbon::parse($registro->hora)->format('h:i A');
                 $registro->nombre_completo = trim($registro->nombre_completo);
                 $registro->rol = $this->tipoARol($registro->asistible_type ?? '');
+                $registro->alumno_relacionado = $registro->rol === 'Tutor'
+                    ? ($registro->alumno_relacionado ?: ($registro->matricula_alumno ? 'Matrícula: '.$registro->matricula_alumno : 'Sin asignar'))
+                    : null;
 
                 return $registro;
             });
@@ -181,22 +205,30 @@ class HistorialController extends Controller
 
             // BOM UTF-8 para compatibilidad con Excel
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
-            fputcsv($file, ['Hora', 'Identificacion', 'Nombre Completo', 'Rol']);
+            fputcsv($file, ['Hora', 'Identificacion', 'Nombre Completo', 'Rol', 'Alumno Relacionado']);
 
             $query->select(
                 'r.hora',
                 'r.asistible_id',
                 'r.asistible_type',
-                DB::raw($this->getNombreCompletoSql())
+                't.matricula_alumno',
+                DB::raw($this->getNombreCompletoSql()),
+                DB::raw($this->getAlumnoRelacionadoSql())
             )
                 ->orderBy('r.hora', 'desc')
                 ->chunk(500, function ($registros) use ($file) {
                     foreach ($registros as $row) {
+                        $rol = self::TYPE_TO_ROL[$row->asistible_type] ?? 'Desconocido';
+                        $alumnoRel = $rol === 'Tutor'
+                            ? ($row->alumno_relacionado ?: ($row->matricula_alumno ? 'Matrícula: '.$row->matricula_alumno : 'Sin asignar'))
+                            : 'N/A';
+
                         fputcsv($file, [
                             Carbon::parse($row->hora)->format('h:i A'),
                             $row->asistible_id,
                             trim($row->nombre_completo),
-                            self::TYPE_TO_ROL[$row->asistible_type] ?? 'Desconocido',
+                            $rol,
+                            $alumnoRel,
                         ]);
                     }
                 });

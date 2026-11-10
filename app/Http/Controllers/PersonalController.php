@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\NotificarAvisoPersonalJob;
 use App\Models\Personal;
 use App\Services\ImageUploadService;
 use App\Services\TelegramService;
@@ -12,8 +13,6 @@ use Inertia\Inertia;
 
 class PersonalController extends Controller
 {
-    public function __construct(private TelegramService $telegramService) {}
-
     public function index()
     {
         Gate::authorize('personal.consultar');
@@ -108,6 +107,8 @@ class PersonalController extends Controller
 
     public function enviarMensaje(Request $request, $id)
     {
+        Gate::authorize('personal.actualizar');
+
         $validated = $request->validate([
             'mensaje' => 'required|string|max:1000',
         ]);
@@ -120,42 +121,35 @@ class PersonalController extends Controller
             ]);
         }
 
-        $exito = $this->telegramService->enviarMensajeDirecto(
-            $personal->telegram_chat_id,
-            $personal->nombre_completo,
-            $validated['mensaje']
-        );
+        $idempotencyKey = md5($personal->id.'_'.$validated['mensaje'].'_'.now()->format('YmdH'));
+        NotificarAvisoPersonalJob::dispatch($personal, $validated['mensaje'], $idempotencyKey);
 
-        if ($exito) {
-            return redirect()->back()->with('success', 'Mensaje enviado exitosamente por Telegram al docente.');
-        } else {
-            return redirect()->back()->withErrors([
-                'mensaje' => 'Hubo un error al intentar enviar el mensaje.',
-            ]);
-        }
+        return redirect()->back()->with('success', 'Mensaje institucional encolado para entrega a Telegram.');
     }
 
     public function enviarMensajeMasivo(Request $request)
     {
+        Gate::authorize('notificaciones.personal');
+
         $validated = $request->validate([
             'mensaje' => 'required|string|max:1000',
         ]);
 
-        $personalConTelegram = Personal::whereNotNull('telegram_chat_id')->where('activo', 1)->get();
+        $personalConTelegram = Personal::whereNotNull('telegram_chat_id')
+            ->where('activo', 1)
+            ->get();
+
         $enviados = 0;
+        $idempotencyKey = md5('masivo_'.trim($validated['mensaje']).'_'.now()->format('YmdHi'));
 
         foreach ($personalConTelegram as $p) {
-            $exito = $this->telegramService->enviarMensajeDirecto(
-                $p->telegram_chat_id,
-                $p->nombre_completo,
-                "📢 *Aviso Institucional (Personal)*\n\n".$validated['mensaje']
-            );
-            if ($exito) {
+            if (! empty($p->telegram_chat_id)) {
+                NotificarAvisoPersonalJob::dispatch($p, $validated['mensaje'], $idempotencyKey);
                 $enviados++;
             }
         }
 
-        return redirect()->back()->with('success', "Aviso masivo enviado a {$enviados} docentes vinculados.");
+        return redirect()->back()->with('success', "Aviso masivo encolado exitosamente para {$enviados} docentes vinculados.");
     }
 
     public function enviarInvitacionTelegram($id)

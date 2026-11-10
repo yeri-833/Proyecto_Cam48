@@ -86,6 +86,10 @@ Route::middleware('auth')->group(function () {
         ->middleware('can:notificaciones.tutores')->name('tutores.mensaje');
     Route::post('/tutores/{id}/invitacion-telegram', [TutorController::class, 'enviarInvitacionTelegram'])
         ->middleware('can:notificaciones.tutores')->name('tutores.invitacion');
+    Route::post('/tutores/{id}/vincular-alumno', [TutorController::class, 'vincularAlumno'])
+        ->middleware('can:tutores.actualizar')->name('tutores.vincularAlumno');
+    Route::delete('/tutores/{id}/desvincular-alumno/{matricula}', [TutorController::class, 'desvincularAlumno'])
+        ->middleware('can:tutores.actualizar')->name('tutores.desvincularAlumno');
 
     // Expediente Digital de Alumnos (Rutas protegidas con autenticación y Policy)
     Route::get('/expedientes', [ExpedienteController::class, 'index'])
@@ -152,6 +156,14 @@ Route::middleware('auth')->group(function () {
         ->middleware('can:eventos.crear')->name('eventos.store');
     Route::delete('/eventos/{id}', [EventoController::class, 'destroy'])
         ->middleware('can:eventos.eliminar')->name('eventos.destroy');
+    Route::get('/eventos/{id}/convocatorias', [EventoController::class, 'convocatorias'])
+        ->middleware('can:eventos.consultar')->name('eventos.convocatorias');
+    Route::post('/eventos/{id}/convocar', [EventoController::class, 'convocar'])
+        ->middleware('can:eventos.crear')->name('eventos.convocar');
+    Route::delete('/eventos/{id}/convocatorias/{tutorId}', [EventoController::class, 'desconvocar'])
+        ->middleware('can:eventos.eliminar')->name('eventos.desconvocar');
+    Route::post('/eventos/{id}/asistencia-manual/{tutorId}', [EventoController::class, 'marcarAsistenciaManual'])
+        ->middleware('can:eventos.crear')->name('eventos.asistenciaManual');
 });
 
 require __DIR__.'/auth.php';

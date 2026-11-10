@@ -26,7 +26,7 @@ class ExpedienteController extends Controller
         $user = $request->user();
         $busqueda = $request->query('busqueda', '');
 
-        $query = ArchivoSistema::with('alumno');
+        $query = ArchivoSistema::with(['alumno' => fn ($q) => $q->select('matricula', 'nombre', 'apellido')]);
         $alumnosQuery = Alumno::where('activo', 1)->accessibleTo($user);
 
         // Los docentes solo visualizan alumnos y expedientes de su grupo asignado

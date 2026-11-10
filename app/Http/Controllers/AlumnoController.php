@@ -40,11 +40,11 @@ class AlumnoController extends Controller
             'nivel_educativo' => $request->nivel_educativo,
             'grado' => $request->grado,
             'grupo' => $request->grupo,
-            'curp' => $request->curp ? strtoupper($request->curp) : null,
-            'fecha_nacimiento' => $request->fecha_nacimiento,
-            'edad' => $request->edad,
-            'comentarios' => $request->comentarios,
-            'discapacidad' => $request->discapacidad,
+            'curp' => $request->filled('curp') ? strtoupper($request->curp) : null,
+            'fecha_nacimiento' => $request->filled('fecha_nacimiento') ? $request->fecha_nacimiento : null,
+            'edad' => $request->filled('edad') ? (int) $request->edad : null,
+            'comentarios' => $request->filled('comentarios') ? $request->comentarios : null,
+            'discapacidad' => $request->filled('discapacidad') ? $request->discapacidad : null,
             'activo' => 1,
         ];
 
@@ -91,13 +91,42 @@ class AlumnoController extends Controller
             'discapacidad' => 'nullable|string|max:100',
             'foto_perfil' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
             'activo' => 'nullable|boolean',
+            'borrar_curp' => 'nullable|boolean',
+            'borrar_fecha_nacimiento' => 'nullable|boolean',
+            'borrar_edad' => 'nullable|boolean',
+            'borrar_comentarios' => 'nullable|boolean',
+            'borrar_discapacidad' => 'nullable|boolean',
         ]);
 
-        $data = Arr::except($validated, ['foto_perfil']);
+        $data = Arr::except($validated, [
+            'foto_perfil',
+            'borrar_curp',
+            'borrar_fecha_nacimiento',
+            'borrar_edad',
+            'borrar_comentarios',
+            'borrar_discapacidad',
+        ]);
         $data['nombre'] = strtoupper($validated['nombre']);
         $data['apellido'] = strtoupper($validated['apellido']);
-        if (array_key_exists('curp', $data) && $data['curp'] !== null) {
-            $data['curp'] = strtoupper($data['curp']);
+
+        // Preservación estricta de campos sensibles ante valores no informados o vacíos
+        $camposPreservables = [
+            'curp' => 'strtoupper',
+            'fecha_nacimiento' => null,
+            'edad' => 'intval',
+            'comentarios' => null,
+            'discapacidad' => null,
+        ];
+
+        foreach ($camposPreservables as $campo => $transformador) {
+            if ($request->filled($campo)) {
+                $valor = $validated[$campo];
+                $data[$campo] = $transformador ? $transformador($valor) : $valor;
+            } elseif ($request->boolean('borrar_'.$campo)) {
+                $data[$campo] = null;
+            } else {
+                unset($data[$campo]);
+            }
         }
 
         if (! $puedeAsignar) {

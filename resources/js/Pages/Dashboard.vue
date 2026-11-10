@@ -102,10 +102,10 @@ const abrirModalEditar = (alumno) => {
     form.sexo = alumno.sexo || 'M';
     form.curp = alumno.curp || '';
     form.fecha_nacimiento = alumno.fecha_nacimiento || '';
-    form.edad = alumno.edad || '';
+    form.edad = (alumno.edad !== null && alumno.edad !== undefined) ? alumno.edad : '';
     form.nivel_educativo = alumno.nivel_educativo || '';
-    form.grado = alumno.grado;
-    form.grupo = alumno.grupo;
+    form.grado = alumno.grado || '';
+    form.grupo = alumno.grupo || '';
     form.discapacidad = alumno.discapacidad || '';
     form.comentarios = alumno.comentarios || '';
     form.foto_perfil = null;

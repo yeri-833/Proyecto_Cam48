@@ -25,6 +25,8 @@ const toggleTheme = () => {
 };
 
 let syncInterval = null;
+let removeStartListener = null;
+let removeFinishListener = null;
 
 const checkTelegramSync = async () => {
     try {
@@ -68,13 +70,24 @@ onMounted(() => {
         syncInterval = setInterval(checkTelegramSync, 60000);
     }
 
-    // Eventos de Navegación para Skeleton / Loading
-    router.on('start', () => { isNavigating.value = true; });
-    router.on('finish', () => { isNavigating.value = false; });
+    // Eventos de Navegación para Skeleton / Loading (con liberación de memoria y sin callbacks duplicados)
+    removeStartListener = router.on('start', () => { isNavigating.value = true; });
+    removeFinishListener = router.on('finish', () => { isNavigating.value = false; });
 });
 
 onUnmounted(() => {
-    if (syncInterval) clearInterval(syncInterval);
+    if (syncInterval) {
+        clearInterval(syncInterval);
+        syncInterval = null;
+    }
+    if (typeof removeStartListener === 'function') {
+        removeStartListener();
+        removeStartListener = null;
+    }
+    if (typeof removeFinishListener === 'function') {
+        removeFinishListener();
+        removeFinishListener = null;
+    }
 });
 
 const confirmarSalida = () => {
