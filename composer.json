@@ -1,8 +1,8 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "familylock/familylock",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "FamilyLock — Sistema de Gestión Escolar y Asistencia (CAM N.º 48)",
     "keywords": ["laravel", "framework"],
     "license": "MIT",
     "require": {
