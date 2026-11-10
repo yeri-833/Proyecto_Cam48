@@ -97,7 +97,7 @@ try {
         'date.timezone' => 'UTC',
     ] as $name => $value) {
         $command[] = '-d';
-        $command[] = $name.'='.$value;
+        $command[] = $name.'='.($name === 'open_basedir' ? '"'.$value.'"' : $value);
     }
     $command[] = __DIR__.'/child.php';
     if ($filter !== null) {

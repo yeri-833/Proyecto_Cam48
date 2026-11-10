@@ -42,8 +42,8 @@
         "setup": [
             "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
-            "@php artisan key:generate",
-            "@php artisan migrate --force",
+            "@php -r \"\\$c = @file_get_contents('.env') ?: ''; if (!preg_match('/^APP_KEY=.+/m', \\$c)) { passthru('php artisan key:generate'); }\"",
+            "@php artisan migrate --graceful --ansi",
             "npm install --ignore-scripts",
             "npm run build"
         ],

@@ -77,7 +77,8 @@ final class IsolatedApplication
             });
         });
 
-        $app->booting(function (): void {
+        $app->booting(function (Application $application): void {
+            Http::swap(new IsolatedHttpFactory($application['events']));
             Http::preventStrayRequests();
             Mail::fake();
             Queue::fake();
