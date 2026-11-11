@@ -49,9 +49,9 @@ return [
     |--------------------------------------------------------------------------
     */
     'executable_paths' => [
-        'php' => 'C:\\php\\php.exe',
-        'composer' => env('BOOST_COMPOSER_EXECUTABLE_PATH'),
-        'npm' => 'C:\\Program Files\\nodejs\\npm.cmd',
+        'php' => env('BOOST_PHP_EXECUTABLE_PATH', 'php'),
+        'composer' => env('BOOST_COMPOSER_EXECUTABLE_PATH', 'composer'),
+        'npm' => env('BOOST_NPM_EXECUTABLE_PATH', 'npm'),
         'vendor_bin' => env('BOOST_VENDOR_BIN_EXECUTABLE_PATH'),
         'current_directory' => env('BOOST_CURRENT_DIRECTORY_EXECUTABLE_PATH'),
     ],
