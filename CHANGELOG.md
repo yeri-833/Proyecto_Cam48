@@ -5,6 +5,28 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 ## [1.4.8] - 2026-11-08
 
 ### Limpieza Integral, Optimización y Estandarización Profesional
+- **Recuperación Independiente de Notificaciones Multicanal y Deduplicación**:
+  - Exclusión de los estados `PARCIAL` y `SIN_CANAL_DISPONIBLE` de `$estadosCompletados` en `InteractsWithNotificationLease.php`, permitiendo la reclamación atómica de notificaciones incompletas para reintentos sin bloquear canales pendientes.
+  - Gestión estructurada y granular en `detalle_canales` (JSON) registrando estado, intentos, último error y fecha de aceptación para cada canal (`whatsapp`, `telegram`, `email`).
+  - Principio estricto de inmutabilidad en entregas exitosas: si un canal ya fue confirmado como `ACEPTADO_PROVEEDOR` (o `'ENTREGADO'`), nunca se reenvía en reintentos posteriores, reintentando únicamente los canales fallidos o pendientes.
+  - Promoción automática a `ACEPTADO_PROVEEDOR` una vez que todos los canales configurados logran la aceptación.
+- **Persistencia de Idempotencia Obligatoria (Política Fail-Closed)**:
+  - Blindaje estricto en los trabajos `NotificarAsistenciaJob`, `NotificarEventoTutorJob` y `NotificarAvisoPersonalJob`: si la tabla `notificaciones_procesadas` no existe en la base de datos o si no se obtiene el lease atómico, el trabajo aborta inmediatamente con `RuntimeException`.
+  - Ningún proveedor externo (WhatsApp, Telegram, Mail) es contactado sin persistencia confirmada ni auditoría previa en MariaDB, eliminando envíos huérfanos o no rastreados.
+- **Protección ante Incertidumbre de Red (`INCIERTO`)**:
+  - Clasificación de timeouts de red (errores cURL 28, timeouts de socket o de transporte) en estado de canal `INCIERTO`, previniendo duplicación accidental de mensajes ante la imposibilidad de saber si el paquete fue recibido por el proveedor.
+- **Protección de Runners de Prueba contra Operaciones Destructivas (`DestructiveTestGuard`)**:
+  - Creación de la clase `tests/Isolation/DestructiveTestGuard.php` y suite unitaria `DestructiveTestGuardTest` (11 pruebas, 27 aserciones).
+  - Bloqueo obligatorio contra operaciones destructivas (`DROP DATABASE`, `CREATE DATABASE`, `TRUNCATE`): exige la variable de entorno `FAMILYLOCK_ALLOW_DESTRUCTIVE_ISOLATION_TESTS=1` o el argumento `--authorize-destructive-tests`.
+  - Restricción estricta a direcciones loopback (`127.0.0.1`, `localhost`, `::1`), puerto aislado (3307 por defecto), bloqueo terminante del puerto de producción (3306), y lista blanca de bases de datos de prueba (`familylock_real_fresh`, `familylock_real_upgrade`, `familylock_concurrency_test`, `familylock_mariadb_fresh`, `familylock_mariadb_upgrade`).
+  - Integración en los tres verificadores de aislamiento: `RealLaravelMigrationsVerificationRunner.php`, `RealConcurrencyVerificationRunner.php` y `MariaDbVerificationRunner.php`.
+- **Batería de Validación Integral (Windows Sandbox y MariaDB 12.3.2)**:
+  - **PHPUnit Completo**: 268 pruebas unitarias y de integración pasando al 100% (1,461 aserciones, 0 errores, 0 fallos).
+  - **Concurrencia Real Multi-Proceso**: 19 aserciones aprobadas en `RealConcurrencyVerificationRunner.php` demostrando exclusión mutua real entre procesos independientes del sistema operativo (`proc_open`) en MariaDB 12.3 y recuperación independiente multicanal sin duplicación de canales previos.
+  - **Migraciones Reales y Reversibilidad**: 30 aserciones aprobadas en `RealLaravelMigrationsVerificationRunner.php` (instalación limpia, actualización desde v1.4.7 con backfill automático y rollback seguro).
+  - **Validación MariaDB Aislada**: 23 aserciones aprobadas en `MariaDbVerificationRunner.php`.
+  - **Análisis Estático Larastan / PHPStan**: 0 errores en tipado estricto en todos los archivos de la aplicación.
+  - **Compilación de Activos Vite**: `npm run build` ejecutado exitosamente en 2.54s generando todos los bundles en `public/build/`.
 - **Jerarquía Oficial de Documentación (`docs/`)**: Reestructuración completa de los documentos técnicos en directorios especializados (`architecture/`, `database/`, `development/`, `security/`, `testing/`, `operations/`, `api/`, `historical/`), trasladando archivos históricos sueltos de la raíz del proyecto a `docs/historical/agent_phases/` y `docs/historical/superpowers/`.
 - **Auditoría y Retiro de Dependencias Innecesarias (`@tailwindcss/vite`)**: Verificación y desinstalación controlada de `@tailwindcss/vite` mediante `npm uninstall` en entorno Sandbox, actualizando limpiamente `package-lock.json` y confirmando la correcta compilación de producción de Vite mediante PostCSS y Tailwind CSS v3.
 - **Optimización de Recursos Gráficos Públicos**:

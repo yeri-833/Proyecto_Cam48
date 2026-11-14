@@ -364,3 +364,43 @@ sudo supervisorctl start familylock-worker:*
 | **Los mensajes de Telegram o avisos no se envían** | El worker de Supervisor está detenido o no hay conexión a internet. | Compruebe `sudo supervisorctl status` y revise el log en `storage/logs/worker.log`. Pruebe el token ejecutando `php artisan tinker --execute 'dump(config("services.telegram"));'`. |
 | **"Unable to locate file in Vite manifest"** | No se ejecutó la compilación de frontend tras una actualización. | Ejecute `npm run build` en la raíz del proyecto. |
 | **Pase de asistencia dice "Pase registrado recientemente"** | Cooldown de seguridad de 5 minutos activo. | Comportamiento esperado contra lecturas repetitivas accidentales. Si el alumno salió y reingresa después de 5 minutos, el sistema lo admitirá. |
+| **"PERSISTENCIA OBLIGATORIA: La tabla 'notificaciones_procesadas' no existe"** | Se intentó despachar notificaciones sin haber ejecutado las migraciones de persistencia e idempotencia. | Política *Fail-Closed*: ejecute `php artisan migrate` para crear la tabla `notificaciones_procesadas`. Ninguna notificación externa será enviada a ciegas sin auditoría. |
+
+---
+
+## 9. Arquitectura de Notificaciones y Resiliencia en Colas
+
+FamilyLock v1.4.8 implementa una arquitectura distribuida de mensajería basada en **arrendamiento atómico (*atomic lease*) con exclusión mutua, política Fail-Closed y recuperación independiente multicanal**:
+
+### 9.1 Política *Fail-Closed* de Persistencia e Idempotencia
+- **Regla Estricta:** Si la tabla `notificaciones_procesadas` no se encuentra disponible en la base de datos o si ocurre un fallo al adquirir el lease atómico, el trabajo (`NotificarAsistenciaJob`, `NotificarEventoTutorJob`, `NotificarAvisoPersonalJob`) **aborta inmediatamente arrojando una excepción**.
+- **Garantía Operativa:** Ningún proveedor externo (WhatsApp, Telegram o SMTP de correo) es contactado sin un registro previo y un arrendamiento (`owner_token`) confirmado en MariaDB. Esto previene de raíz el envío de mensajes huérfanos, no auditados o duplicados descontrolados.
+
+### 9.2 Recuperación Independiente Multicanal
+- En notificaciones multicanal (ej. WhatsApp + Telegram o WhatsApp + Telegram + Correo Electrónico), el estado de cada canal se gestiona de forma granular en la columna `detalle_canales` (JSON estructurado).
+- Si un canal se entrega satisfactoriamente (`ACEPTADO_PROVEEDOR`), su estado queda registrado con marca de tiempo y es **completamente inmutable**.
+- Si otro canal falla (ej. Telegram falla por caída de red), la notificación queda en estado `PARCIAL` y el worker arroja una excepción para que la cola de Laravel reintente.
+- Al ejecutarse el siguiente reintento, el sistema inspecciona `detalle_canales`: **el canal ya aceptado NO se reenvía** (evitando duplicar mensajes a los tutores), y únicamente se reintenta el canal fallido.
+- Cuando todos los canales configurados logran la aceptación, la notificación pasa automáticamente a `ACEPTADO_PROVEEDOR`.
+
+### 9.3 Protección ante Incertidumbre de Red (`INCIERTO`)
+- Si una petición HTTP hacia un proveedor externo sufre un *timeout* (ej. `cURL error 28: Operation timed out`), el sistema reconoce la imposibilidad de determinar si el paquete llegó o no a la pasarela externa.
+- Para prevenir spam o dobles cobros a la institución, el canal se marca como `INCIERTO` y no se reintenta ciegamente.
+
+---
+
+## 10. Protección de Verificadores contra Operaciones Destructivas (`DestructiveTestGuard`)
+
+Para garantizar que ningún script de prueba o runner automatizado pueda borrar o alterar bases de datos institucionales de producción por error o mala configuración, FamilyLock v1.4.8 incorpora la clase guardiana `Tests\Isolation\DestructiveTestGuard`:
+
+- **Autorización Explícita Obligatoria:** Toda operación destructiva (`DROP DATABASE`, `CREATE DATABASE`, `TRUNCATE`) en runners de aislamiento exige obligatoriamente la variable de entorno:
+  ```bash
+  FAMILYLOCK_ALLOW_DESTRUCTIVE_ISOLATION_TESTS=1
+  ```
+  o el argumento CLI:
+  ```bash
+  --authorize-destructive-tests
+  ```
+- **Restricción de Host:** Exclusivamente se autorizan direcciones loopback locales (`127.0.0.1`, `localhost`, `::1`). Se bloquea cualquier host o IP remota.
+- **Restricción de Puerto:** Únicamente se permite el puerto aislado de pruebas (puerto 3307 por defecto). El puerto estándar de producción (`3306`) está **estrictamente bloqueado**.
+- **Lista Blanca Estricta de Bases de Datos:** Solo se permite operar sobre nombres verificados de prueba (`familylock_real_fresh`, `familylock_real_upgrade`, `familylock_concurrency_test`, `familylock_mariadb_fresh`, `familylock_mariadb_upgrade` o prefijo `familylock_test_`). Cualquier nombre institucional o de producción (`familylock_db`, `proyecto_colegio`, `production`, etc.) es rechazado de inmediato.
