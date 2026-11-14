@@ -6,11 +6,11 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/PHP-8.3%2B-777BB4?style=for-the-badge&logo=php&logoColor=white" alt="PHP 8.3+">
-  <img src="https://img.shields.io/badge/Laravel-11%20%2F%2012-FF2D20?style=for-the-badge&logo=laravel&logoColor=white" alt="Laravel">
+  <img src="https://img.shields.io/badge/Laravel-13.x-FF2D20?style=for-the-badge&logo=laravel&logoColor=white" alt="Laravel 13">
   <img src="https://img.shields.io/badge/Vue.js-3.x-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white" alt="Vue 3">
   <img src="https://img.shields.io/badge/Inertia.js-2.x-9553E9?style=for-the-badge&logo=inertia&logoColor=white" alt="Inertia.js">
   <img src="https://img.shields.io/badge/TailwindCSS-3.x-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
-  <img src="https://img.shields.io/badge/MySQL-8.0-4479A1?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL">
+  <img src="https://img.shields.io/badge/MariaDB-10.11%2B%20%2F%20MySQL-4479A1?style=for-the-badge&logo=mariadb&logoColor=white" alt="MariaDB / MySQL">
 </p>
 
 ---
@@ -46,11 +46,12 @@
 
 ## 🛠️ Requisitos del Entorno
 
-- **PHP**: `^8.3` con extensiones activas: `pdo_mysql`, `openssl`, `mbstring`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `fileinfo`, `gd` o `imagick`.
-- **Composer**: `^2.2`
-- **Node.js**: `^18.x` o `^20.x`
-- **NPM**: `^9.x` o `^10.x`
-- **Base de Datos**: MySQL `^8.0` o MariaDB `^10.4`
+- **PHP**: `^8.3` (probado en 8.3–8.5) con extensiones activas: `pdo_mysql`, `openssl`, `mbstring`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `fileinfo`, `gd` o `imagick`.
+- **Laravel**: `^13.8`
+- **Composer**: `^2.7`
+- **Node.js**: `^20.x` o `^22.x` LTS (requerido para compilación con Vite 8)
+- **NPM**: `^10.x`
+- **Base de Datos**: MariaDB `10.11+ LTS` o MySQL `8.0+` (con soporte `utf8mb4` e InnoDB)
 - **Certificado SSL / HTTPS**: Obligatorio en producción para permitir el acceso del navegador a la cámara web en la terminal del kiosco.
 
 ---

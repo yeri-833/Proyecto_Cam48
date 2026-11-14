@@ -23,16 +23,14 @@
 | **Certificado SSL/TLS** | Certificado X.509 válido (Let's Encrypt o institucional). | Los navegadores modernos **bloquean la cámara web de los quioscos QR** si el origen no es `https://` o `localhost`. |
 | **Gestor de Procesos** | Supervisor (o Systemd) para trabajadores de cola. | Para el despacho asíncrono y reintentos de notificaciones. |
 
-### 1.2 Recomendaciones de Infraestructura y Capacidad Operativa
+### 1.2 Capacidades Verificadas y Recomendaciones de Infraestructura
 
-- **Capacidad Medida y Probada en Entorno Aislado**:
-  - Validado y probado exhaustivamente para planteles de educación básica y especial con matrículas de **100 a 500 alumnos**.
-  - Soporta operación continua con hasta 2 a 3 quioscos de escaneo QR simultáneos.
-  - Despacho y deduplicación atómica de notificaciones validado con colas en base de datos MariaDB.
-- **Compatibilidad Arquitectónica (Escalabilidad Horizontal)**:
-  - La arquitectura stateless de Laravel, Inertia y base de datos relacional desacoplada permite dimensionamiento horizontal si la escuela lo requiere.
-  - Para instituciones con requerimientos superiores a 500 alumnos o alto volumen transaccional continuo, se recomienda desacoplar la cola hacia Redis y realizar pruebas de carga (*stress testing*) adaptadas al hardware del cliente antes de la puesta en marcha.
-- **CPU / RAM Recomendado para Plantel Típico**:
+- **Capacidades Verificadas en Entorno Aislado**:
+  - Integridad relacional, lógica de negocio, migraciones en MariaDB 12.3 y concurrencia multi-proceso en despacho de notificaciones verificadas mediante pruebas automatizadas.
+  - **Nota sobre rendimiento:** En esta versión no se han ejecutado pruebas de carga (*stress testing* / *benchmarking*) con tráfico concurrente simulado de múltiples terminales. Cualquier dimensionamiento de matrícula o quioscos simultáneos debe validarse mediante pruebas de carga específicas sobre el hardware del plantel antes de autorizar producción.
+- **Compatibilidad Arquitectónica (Escalabilidad)**:
+  - La arquitectura stateless de Laravel, Inertia y base de datos relacional desacoplada permite escalar workers y separar el driver de colas hacia Redis cuando el volumen transaccional lo amerite.
+- **Línea Base Recomendada de Infraestructura (Punto de Partida)**:
   - Servidor dedicado o VPS con al menos 2 vCPU y 4 GB de RAM.
   - Almacenamiento: Disco SSD o NVMe con al menos 20 GB de espacio libre (para expedientes en PDF, fotografías y respaldos rotativos).
 
@@ -72,15 +70,22 @@ FLUSH PRIVILEGES;
 EXIT;
 ```
 
-### Paso 3: Despliegue del Código Fuente y Permisos
+### Paso 3: Despliegue del Código Fuente y Permisos Restringidos
+
+Para proteger la integridad del código fuente, el usuario de PHP-FPM (`www-data`) **NO debe tener permisos de escritura sobre el código de la aplicación**. Únicamente `storage` y `bootstrap/cache` deben ser escribibles por `www-data`:
 
 ```bash
-# Clonar en el directorio web corporativo
-sudo git clone -b feature/familylock-v1.4.8-consolidacion https://github.com/yeri-833/Proyecto_Cam48.git /var/www/familylock
+# Clonar una etiqueta de lanzamiento inmutable (ejemplo: v1.4.8 cuando esté publicada)
+sudo git clone --branch v1.4.8 --depth 1 https://github.com/yeri-833/Proyecto_Cam48.git /var/www/familylock
 cd /var/www/familylock
 
-# Asignar propietario a www-data (o usuario de Nginx/PHP-FPM)
-sudo chown -R www-data:www-data /var/www/familylock
+# Código fuente propiedad de root (lectura para grupo www-data, sin escritura para PHP-FPM)
+sudo chown -R root:www-data /var/www/familylock
+sudo find /var/www/familylock -type d -exec chmod 750 {} \;
+sudo find /var/www/familylock -type f -exec chmod 640 {} \;
+
+# Permisos de escritura restringidos EXCLUSIVAMENTE a storage y bootstrap/cache
+sudo chown -R www-data:www-data /var/www/familylock/storage /var/www/familylock/bootstrap/cache
 sudo chmod -R 775 /var/www/familylock/storage /var/www/familylock/bootstrap/cache
 ```
 
@@ -111,32 +116,52 @@ QUEUE_CONNECTION=database
 SESSION_DRIVER=database
 CACHE_STORE=database
 
-# Tokens de Notificaciones
+# Tokens y Servicios de Mensajería (Telegram, WhatsApp y Correo)
 TELEGRAM_BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrSTUvwxYZ"
 TELEGRAM_BOT_USERNAME="MiEscuelaBot"
+TELEGRAM_CHANNEL_ID="@MiEscuelaComunicados"
+
+WHATSAPP_API_URL="https://tu-gateway-whatsapp.ejemplo"
+WHATSAPP_API_TOKEN="token_privado_whatsapp"
+
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.plantel.edu.mx
+MAIL_PORT=587
+MAIL_USERNAME="notificaciones@plantel.edu.mx"
+MAIL_PASSWORD="CLAVE_SMTP_SEGURA"
+MAIL_FROM_ADDRESS="notificaciones@plantel.edu.mx"
 
 # Administrador Institucional Inicial
 ADMIN_EMAIL=director@plantel.edu.mx
 ADMIN_PASSWORD="ClaveInicialAdministrador123!"
 ```
 
+Proteja el archivo `.env` para que únicamente `root` y el grupo `www-data` puedan leerlo:
+```bash
+sudo chown root:www-data /var/www/familylock/.env
+sudo chmod 640 /var/www/familylock/.env
+```
+
 ### Paso 5: Instalación Automatizada y Compilación
 
-Ejecute como usuario `www-data` (o ajuste permisos posteriormente):
+Ejecute la instalación de dependencias y compilación con el usuario de despliegue (`root` o `deploy`), y las tareas de `artisan` con `www-data`:
 
 ```bash
-# Instalación de dependencias backend sin riesgo de sobreescritura de APP_KEY
-sudo -u www-data composer install --no-dev --optimize-autoloader
+# Instalación de dependencias backend sin otorgar escritura a PHP-FPM sobre el código
+sudo composer install --no-dev --optimize-autoloader
+
+# Instalar dependencias frontend y compilar paquetes Vite
+sudo npm ci --ignore-scripts
+sudo npm run build
+
+# Reaplicar permisos de solo lectura sobre vendor/ y public/build/ para www-data
+sudo chown -R root:www-data /var/www/familylock/vendor /var/www/familylock/public/build
 
 # Generar llave institucional si es una instalación completamente nueva
 sudo -u www-data php artisan key:generate --force
 
 # Ejecutar migraciones de base de datos de manera grácil
 sudo -u www-data php artisan migrate --graceful --ansi
-
-# Instalar dependencias frontend y compilar paquetes Vite
-npm ci --ignore-scripts
-npm run build
 
 # Crear enlace simbólico de almacenamiento público
 sudo -u www-data php artisan storage:link
@@ -254,8 +279,9 @@ cd /var/www/familylock
 # 1. Poner la aplicación en modo mantenimiento controlado
 sudo -u www-data php artisan down --render="errors::503" --secret="actualizacion-plantel"
 
-# 2. Descargar los cambios del repositorio
-sudo git pull origin feature/familylock-v1.4.8-consolidacion
+# 2. Descargar la etiqueta inmutable de la nueva versión (ej. v1.4.8)
+sudo git fetch --tags
+sudo git checkout tags/v1.4.8
 
 # 3. Actualizar librerías sin ejecutar comandos destructivos
 sudo -u www-data composer install --no-dev --optimize-autoloader
