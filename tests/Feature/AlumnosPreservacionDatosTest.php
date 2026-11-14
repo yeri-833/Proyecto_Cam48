@@ -190,4 +190,93 @@ class AlumnosPreservacionDatosTest extends TestCase
         $this->assertSame('BORRAR123456HDFR0', $alumno->curp);
         $this->assertSame(10, $alumno->edad);
     }
+
+    public function test_actualizacion_sin_foto_preserva_foto_perfil_existente_y_asistencias(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $alumno = Alumno::create([
+            'matricula' => 'FICT_PRESERV_FOTO',
+            'nombre' => 'Alumno',
+            'apellido' => 'Con Foto',
+            'foto_perfil' => 'fotos/alumnos/perfil_original.jpg',
+            'activo' => 1,
+        ]);
+
+        \App\Models\RegistroAsistencia::create([
+            'asistible_type' => Alumno::class,
+            'asistible_id' => $alumno->matricula,
+            'fecha' => now()->toDateString(),
+            'hora' => '08:00:00',
+        ]);
+
+        $this->actingAs($admin)->put(route('alumnos.update', $alumno->matricula), [
+            'nombre' => 'Alumno Renombrado',
+            'apellido' => 'Con Foto',
+        ])->assertRedirect();
+
+        $alumno->refresh();
+        $this->assertSame('ALUMNO RENOMBRADO', $alumno->nombre);
+        $this->assertSame('fotos/alumnos/perfil_original.jpg', $alumno->foto_perfil, 'La foto no debe ser alterada');
+        $this->assertSame(1, \App\Models\RegistroAsistencia::where('asistible_id', $alumno->matricula)->count(), 'El historial de asistencia debe permanecer intacto');
+    }
+
+    public function test_desvinculacion_de_tutor_preserva_historial_y_actualiza_clave_familiar(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $alumno = Alumno::create([
+            'matricula' => 'ALU_DESVINC_01',
+            'nombre' => 'David',
+            'apellido' => 'Cruz',
+            'activo' => 1,
+        ]);
+
+        $tutor = \App\Models\Tutor::create([
+            'matricula_alumno' => $alumno->matricula,
+            't1_nombre' => 'Monica Cruz',
+            't1_telefono' => '9215551122',
+        ]);
+
+        \Illuminate\Support\Facades\DB::table('alumno_tutor')->insert([
+            'tutor_id' => $tutor->id,
+            'alumno_matricula' => $alumno->matricula,
+            'es_tutor_principal' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Registrar asistencia tanto para el alumno como para el tutor
+        \App\Models\RegistroAsistencia::create([
+            'asistible_type' => Alumno::class,
+            'asistible_id' => $alumno->matricula,
+            'fecha' => now()->toDateString(),
+            'hora' => '08:10:00',
+        ]);
+        \App\Models\RegistroAsistencia::create([
+            'asistible_type' => \App\Models\Tutor::class,
+            'asistible_id' => (string) $tutor->id,
+            'fecha' => now()->toDateString(),
+            'hora' => '08:15:00',
+        ]);
+
+        $familiaService = new \App\Services\FamiliaService();
+        $this->assertSame('FAM:ALU_DESVINC_01', $familiaService->obtenerClaveFamilia($tutor));
+
+        // Desvincular alumno del tutor
+        $this->actingAs($admin)->delete(route('tutores.desvincularAlumno', [
+            'id' => $tutor->id,
+            'matricula' => $alumno->matricula,
+        ]))->assertRedirect();
+
+        // 1. Historial del alumno se conserva
+        $this->assertSame(1, \App\Models\RegistroAsistencia::where('asistible_type', Alumno::class)->where('asistible_id', $alumno->matricula)->count());
+
+        // 2. Historial del tutor se conserva
+        $this->assertSame(1, \App\Models\RegistroAsistencia::where('asistible_type', \App\Models\Tutor::class)->where('asistible_id', (string) $tutor->id)->count());
+
+        // 3. Clave familiar se actualiza (el tutor ahora es independiente o sin alumnos)
+        $tutor->refresh();
+        $nuevaClave = $familiaService->obtenerClaveFamilia($tutor);
+        $this->assertNotSame('FAM:ALU_DESVINC_01', $nuevaClave);
+        $this->assertStringStartsWith('FAM-ISOLATED:', $nuevaClave);
+    }
 }

@@ -181,6 +181,14 @@ class TutorController extends Controller
                 ->delete();
         }
 
+        // Si la columna legacy matricula_alumno apunta al alumno desvinculado, sincronizar con el siguiente o dejar en null
+        if ($tutor->matricula_alumno === $matricula) {
+            $siguiente = Schema::hasTable('alumno_tutor')
+                ? DB::table('alumno_tutor')->where('tutor_id', $tutor->id)->value('alumno_matricula')
+                : null;
+            $tutor->update(['matricula_alumno' => $siguiente]);
+        }
+
         return redirect()->back()->with('success', 'Vínculo tutor-alumno removido.');
     }
 
