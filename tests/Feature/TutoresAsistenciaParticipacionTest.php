@@ -880,12 +880,19 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
         $tgMock = \Mockery::mock(\App\Services\TelegramService::class);
 
+        $evento = Evento::create([
+            'nombre_evento' => 'Junta General 2026',
+            'fecha_hora' => '2026-11-10 10:00:00',
+            'ubicacion' => 'Auditorio CAM 48',
+        ]);
+
         $job = new \App\Jobs\NotificarEventoTutorJob(
             $tutor,
             'Recordatorio de Junta',
             'Junta General 2026',
             '10/11/2026 10:00 AM',
-            'Auditorio CAM 48'
+            'Auditorio CAM 48',
+            $evento->id
         );
 
         // Primera ejecución: debe enviar WhatsApp y registrar en notificaciones_procesadas
@@ -894,14 +901,14 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         $this->assertDatabaseHas('notificaciones_procesadas', [
             'destinatario_tipo' => 'Tutor',
             'destinatario_id' => (string) $tutor->id,
-            'estado' => 'ENTREGADO',
+            'estado' => 'ACEPTADO_PROVEEDOR',
         ]);
 
         // Segunda ejecución con los mismos datos: debe omitir y no volver a enviar al mock
         $job->handle($wsMock, $tgMock);
 
         // Solo debe haber un registro en la tabla para esta clave
-        $idempotencyKey = hash('sha256', "evento:Junta General 2026:tutor:{$tutor->id}:fecha:10/11/2026 10:00 AM");
+        $idempotencyKey = hash('sha256', "evento:id:{$evento->id}:tutor:{$tutor->id}:fecha:10/11/2026 10:00 AM");
         $count = \Illuminate\Support\Facades\DB::table('notificaciones_procesadas')
             ->where('idempotency_key', $idempotencyKey)
             ->count();
@@ -943,7 +950,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         $this->assertDatabaseHas('notificaciones_procesadas', [
             'destinatario_tipo' => 'Alumno',
             'destinatario_id' => (string) $alumno->matricula,
-            'estado' => 'ENTREGADO',
+            'estado' => 'ACEPTADO_PROVEEDOR',
         ]);
 
         // Segunda ejecución para el mismo alumno/pase/hora: se detecta como duplicado

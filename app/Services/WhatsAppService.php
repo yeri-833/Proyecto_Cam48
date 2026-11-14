@@ -63,6 +63,14 @@ class WhatsAppService
      */
     public function enviarAvisoEvento(string $nombreEvento, string $fecha, ?string $ubicacion, ?int $eventoId = null): bool
     {
+        if ($eventoId === null || $eventoId <= 0) {
+            Log::warning('[WhatsApp] Despacho de aviso de evento abortado: falta eventoId explícito.', [
+                'nombre_evento' => $nombreEvento,
+            ]);
+
+            return false;
+        }
+
         $mensaje = "📅 *CAM #48 - Nuevo Evento Escolar*\n\n"
                  ."Se ha agendado una nueva actividad en la escuela:\n\n"
                  ."📌 *Actividad:* {$nombreEvento}\n"

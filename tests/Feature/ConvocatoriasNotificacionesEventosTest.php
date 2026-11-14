@@ -195,11 +195,104 @@ class ConvocatoriasNotificacionesEventosTest extends TestCase
         $registros = DB::table('notificaciones_procesadas')
             ->where('destinatario_tipo', 'Tutor')
             ->where('destinatario_id', (string) $this->tutor->id)
-            ->where('estado', 'ENTREGADO')
+            ->where('estado', 'ACEPTADO_PROVEEDOR')
             ->get();
 
         $this->assertCount(2, $registros);
         $this->assertNotEquals($registros[0]->idempotency_key, $registros[1]->idempotency_key);
+    }
+
+    public function test_job_sin_evento_id_se_detiene_de_forma_segura_sin_tocar_convocatorias(): void
+    {
+        // Existen dos eventos con el MISMO nombre para demostrar que nunca se usa nombre_evento
+        $eventoMismoNombre1 = Evento::create([
+            'nombre_evento' => 'Junta Mensual Repetida',
+            'fecha_hora' => now()->addDays(5),
+            'ubicacion' => 'Salon 1',
+        ]);
+        $eventoMismoNombre2 = Evento::create([
+            'nombre_evento' => 'Junta Mensual Repetida',
+            'fecha_hora' => now()->addDays(10),
+            'ubicacion' => 'Salon 2',
+        ]);
+
+        DB::table('evento_convocatorias')->insert([
+            ['evento_id' => $eventoMismoNombre1->id, 'tutor_id' => $this->tutor->id, 'notificado' => false, 'asistio' => false, 'created_at' => now(), 'updated_at' => now()],
+            ['evento_id' => $eventoMismoNombre2->id, 'tutor_id' => $this->tutor->id, 'notificado' => false, 'asistio' => false, 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $wsMock = Mockery::mock(WhatsAppService::class);
+        $wsMock->shouldNotReceive('enviarMensajeDirecto');
+
+        $tgMock = Mockery::mock(TelegramService::class);
+        $tgMock->shouldNotReceive('enviarAvisoEventoDirecto');
+
+        // Despacho sin evento_id (null)
+        $job = new NotificarEventoTutorJob(
+            $this->tutor,
+            'Aviso ambiguo',
+            'Junta Mensual Repetida',
+            '15/11/2026 10:00',
+            'Salon 1',
+            null
+        );
+        $job->handle($wsMock, $tgMock);
+
+        // Ninguna convocatoria debe haber sido modificada
+        $this->assertDatabaseHas('evento_convocatorias', [
+            'evento_id' => $eventoMismoNombre1->id,
+            'tutor_id' => $this->tutor->id,
+            'notificado' => false,
+        ]);
+        $this->assertDatabaseHas('evento_convocatorias', [
+            'evento_id' => $eventoMismoNombre2->id,
+            'tutor_id' => $this->tutor->id,
+            'notificado' => false,
+        ]);
+    }
+
+    public function test_dos_eventos_mismo_nombre_y_tutor_compartido_no_interfieren_entre_si(): void
+    {
+        $eventoA = Evento::create([
+            'nombre_evento' => 'Junta De Padres',
+            'fecha_hora' => now()->addDays(6),
+            'ubicacion' => 'Patio A',
+        ]);
+        $eventoB = Evento::create([
+            'nombre_evento' => 'Junta De Padres',
+            'fecha_hora' => now()->addDays(7),
+            'ubicacion' => 'Patio B',
+        ]);
+
+        DB::table('evento_convocatorias')->insert([
+            ['evento_id' => $eventoA->id, 'tutor_id' => $this->tutor->id, 'notificado' => false, 'asistio' => false, 'created_at' => now(), 'updated_at' => now()],
+            ['evento_id' => $eventoB->id, 'tutor_id' => $this->tutor->id, 'notificado' => false, 'asistio' => false, 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $wsMock = Mockery::mock(WhatsAppService::class);
+        $wsMock->shouldReceive('enviarMensajeDirecto')->once()->andReturn(true);
+        $tgMock = Mockery::mock(TelegramService::class);
+
+        $job = new NotificarEventoTutorJob(
+            $this->tutor,
+            'Aviso Evento A',
+            'Junta De Padres',
+            '16/11/2026 10:00',
+            'Patio A',
+            $eventoA->id
+        );
+        $job->handle($wsMock, $tgMock);
+
+        $this->assertDatabaseHas('evento_convocatorias', [
+            'evento_id' => $eventoA->id,
+            'tutor_id' => $this->tutor->id,
+            'notificado' => true,
+        ]);
+        $this->assertDatabaseHas('evento_convocatorias', [
+            'evento_id' => $eventoB->id,
+            'tutor_id' => $this->tutor->id,
+            'notificado' => false,
+        ]);
     }
 
     public function test_desconvocatoria_y_registro_manual_independiente(): void
