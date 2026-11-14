@@ -196,15 +196,22 @@ class EstadisticasController extends Controller
                     ->map(fn ($id) => (int) $id)
                     ->unique();
 
-                // Si no hay registros con evento_id explícito, fallback por fecha para eventos históricos
+                // Manejo riguroso de registros históricos sin evento_id:
+                // ÚNICAMENTE se permite el fallback por fecha si en esa fecha existió un único evento registrado.
+                // Si existieron múltiples juntas el mismo día, cualquier registro sin evento_id es ambiguo
+                // y NO debe atribuirse automáticamente a ninguna junta específica.
                 if ($asistenciasTutorIds->isEmpty()) {
-                    $asistenciasTutorIds = RegistroAsistencia::where('asistible_type', Tutor::class)
-                        ->whereNull('evento_id')
-                        ->whereDate('fecha', $fechaEvento)
-                        ->pluck('asistible_id')
-                        ->filter(fn ($id) => is_numeric($id))
-                        ->map(fn ($id) => (int) $id)
-                        ->unique();
+                    $eventosEnMismaFecha = Evento::whereDate('fecha_hora', $fechaEvento)->count();
+
+                    if ($eventosEnMismaFecha === 1) {
+                        $asistenciasTutorIds = RegistroAsistencia::where('asistible_type', Tutor::class)
+                            ->whereNull('evento_id')
+                            ->whereDate('fecha', $fechaEvento)
+                            ->pluck('asistible_id')
+                            ->filter(fn ($id) => is_numeric($id))
+                            ->map(fn ($id) => (int) $id)
+                            ->unique();
+                    }
                 }
 
                 $tutoresAsistentes = Tutor::whereIn('id', $asistenciasTutorIds)->get();
