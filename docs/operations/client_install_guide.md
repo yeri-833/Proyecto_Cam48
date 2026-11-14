@@ -23,11 +23,18 @@
 | **Certificado SSL/TLS** | Certificado X.509 válido (Let's Encrypt o institucional). | Los navegadores modernos **bloquean la cámara web de los quioscos QR** si el origen no es `https://` o `localhost`. |
 | **Gestor de Procesos** | Supervisor (o Systemd) para trabajadores de cola. | Para el despacho asíncrono y reintentos de notificaciones. |
 
-### 1.2 Recomendaciones de Infraestructura (Recomendado para Planteles Medianos y Grandes)
+### 1.2 Recomendaciones de Infraestructura y Capacidad Operativa
 
-- **CPU / RAM**: 2 vCPU y 4 GB de RAM (soporta hasta 1,500 alumnos y 3 quioscos de acceso continuo).
-- **Almacenamiento**: Disco SSD o NVMe con al menos 20 GB de espacio libre (para expedientes en PDF, fotografías y respaldos rotativos).
-- **Caché / Sesiones**: Para planteles con más de 2,000 alumnos concurrentes, se recomienda Redis 7+ en lugar del driver `database`.
+- **Capacidad Medida y Probada en Entorno Aislado**:
+  - Validado y probado exhaustivamente para planteles de educación básica y especial con matrículas de **100 a 500 alumnos**.
+  - Soporta operación continua con hasta 2 a 3 quioscos de escaneo QR simultáneos.
+  - Despacho y deduplicación atómica de notificaciones validado con colas en base de datos MariaDB.
+- **Compatibilidad Arquitectónica (Escalabilidad Horizontal)**:
+  - La arquitectura stateless de Laravel, Inertia y base de datos relacional desacoplada permite dimensionamiento horizontal si la escuela lo requiere.
+  - Para instituciones con requerimientos superiores a 500 alumnos o alto volumen transaccional continuo, se recomienda desacoplar la cola hacia Redis y realizar pruebas de carga (*stress testing*) adaptadas al hardware del cliente antes de la puesta en marcha.
+- **CPU / RAM Recomendado para Plantel Típico**:
+  - Servidor dedicado o VPS con al menos 2 vCPU y 4 GB de RAM.
+  - Almacenamiento: Disco SSD o NVMe con al menos 20 GB de espacio libre (para expedientes en PDF, fotografías y respaldos rotativos).
 
 ---
 
