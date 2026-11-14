@@ -13,12 +13,17 @@ $app = require_once __DIR__.'/../../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
+use App\Jobs\NotificarAsistenciaJob;
 use App\Jobs\NotificarAvisoPersonalJob;
+use App\Models\Alumno;
 use App\Models\Personal;
+use App\Models\Tutor;
 use App\Services\TelegramService;
+use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Tests\Isolation\DestructiveTestGuard;
 
 $host = '127.0.0.1';
 $port = 3307;
@@ -88,6 +93,9 @@ if (($argv[1] ?? '') === '--child-worker') {
 // ─────────────────────────────────────────────────────────────
 // MODO COORDINADOR
 // ─────────────────────────────────────────────────────────────
+$cliArgs = $argv ?? [];
+DestructiveTestGuard::guardDatabaseOperation($host, $port, $dbName, $cliArgs);
+
 $pdo = new PDO("mysql:host={$host};port={$port};charset=utf8mb4", $user, $pass, [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -109,6 +117,24 @@ $pdo->exec("
         telefono VARCHAR(30) NULL,
         telegram_chat_id VARCHAR(50) NULL,
         activo TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP NULL,
+        updated_at TIMESTAMP NULL
+    ) ENGINE=InnoDB;
+
+    CREATE TABLE alumnos (
+        matricula VARCHAR(50) PRIMARY KEY,
+        nombre VARCHAR(100) NOT NULL,
+        apellido VARCHAR(100) NOT NULL,
+        activo TINYINT(1) DEFAULT 1,
+        fecha_registro TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB;
+
+    CREATE TABLE tutores (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        matricula_alumno VARCHAR(50) NULL,
+        t1_nombre VARCHAR(150) NOT NULL,
+        t1_telefono VARCHAR(30) NULL,
+        t1_telegram_chat_id VARCHAR(50) NULL,
         created_at TIMESTAMP NULL,
         updated_at TIMESTAMP NULL
     ) ENGINE=InnoDB;
@@ -343,6 +369,90 @@ assertConc(count($envios4) === 1, 'Reintento completó el envío y el segundo de
 assertConc($row4->estado === 'ACEPTADO_PROVEEDOR' && (int) $row4->intentos === 2, 'Estado ACEPTADO_PROVEEDOR con 2 intentos registrados', $assertions);
 @unlink($barrier4);
 @unlink($log4);
+
+// 6. Recuperación independiente multicanal: reintento de canal fallido sin duplicar canal ya aceptado
+echo "\n--- Escenario 8: Recuperación multicanal independiente tras fallo parcial ---\n";
+$alumnoConc = Alumno::create([
+    'matricula' => 'ALUM_CONC_RECUP',
+    'nombre' => 'Daniel',
+    'apellido' => 'Sánchez',
+    'activo' => true,
+]);
+
+$tutorConc = Tutor::create([
+    'matricula_alumno' => $alumnoConc->matricula,
+    't1_nombre' => 'Patricia Sánchez',
+    't1_telefono' => '9211234567',
+    't1_telegram_chat_id' => '77665544',
+]);
+$alumnoConc->setRelation('tutor', $tutorConc);
+
+$jobRecup = new NotificarAsistenciaJob($alumnoConc, 'ENTRADA', '08:00 AM', 'Daniel Sánchez', '2026-11-14');
+$key5 = $jobRecup->resolverIdempotencyKey();
+
+// Simular que el intento anterior guardó WhatsApp como ACEPTADO_PROVEEDOR pero Telegram como FALLIDO
+DB::table('notificaciones_procesadas')->insert([
+    'idempotency_key' => $key5,
+    'destinatario_tipo' => 'Alumno',
+    'destinatario_id' => (string) $alumnoConc->matricula,
+    'canal' => 'MULTICANAL',
+    'estado' => 'PARCIAL',
+    'owner_token' => null,
+    'lease_expires_at' => null,
+    'intentos' => 1,
+    'detalle_canales' => json_encode([
+        'whatsapp' => [
+            'estado' => 'ACEPTADO_PROVEEDOR',
+            'intentos' => 1,
+            'ultimo_error' => null,
+            'fecha_aceptacion' => Carbon::now()->toIso8601String(),
+        ],
+        'telegram' => [
+            'estado' => 'FALLIDO',
+            'intentos' => 1,
+            'ultimo_error' => 'Timeout proveedor Telegram',
+            'fecha_aceptacion' => null,
+        ],
+    ], JSON_UNESCAPED_UNICODE),
+    'ultimo_error' => 'Telegram: Timeout proveedor Telegram',
+    'created_at' => Carbon::now()->subMinutes(1),
+    'updated_at' => Carbon::now()->subMinutes(1),
+]);
+
+$wsInvocado = false;
+$tgInvocado = false;
+
+$wsStub = new class($wsInvocado) extends WhatsAppService {
+    public function __construct(private bool &$wsInvocado) {
+        parent::__construct();
+    }
+    public function enviarAvisoAsistencia(string $telefono, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): bool {
+        $this->wsInvocado = true;
+        throw new RuntimeException("ERROR: WhatsApp no debió ser llamado porque ya fue aceptado.");
+    }
+};
+
+$tgStub = new class($tgInvocado) extends TelegramService {
+    public function __construct(private bool &$tgInvocado) {
+        parent::__construct();
+    }
+    public function enviarAvisoAsistencia(string|int|null $chatId, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): bool {
+        $this->tgInvocado = true;
+        return true;
+    }
+};
+
+// Ejecutar reintento
+$jobRecup->handle($wsStub, $tgStub);
+
+$row5 = DB::table('notificaciones_procesadas')->where('idempotency_key', $key5)->first();
+$det5 = json_decode((string) $row5->detalle_canales, true);
+
+assertConc($wsInvocado === false, 'WhatsApp NO fue reenviado (inmutabilidad de canal ya aceptado)', $assertions);
+assertConc($tgInvocado === true, 'Telegram SÍ fue reintentado y completado', $assertions);
+assertConc($row5->estado === 'ACEPTADO_PROVEEDOR', 'Estado final de la notificación promovido a ACEPTADO_PROVEEDOR', $assertions);
+assertConc(($det5['whatsapp']['estado'] ?? '') === 'ACEPTADO_PROVEEDOR', 'Detalle de canal WhatsApp preserva ACEPTADO_PROVEEDOR', $assertions);
+assertConc(($det5['telegram']['estado'] ?? '') === 'ACEPTADO_PROVEEDOR', 'Detalle de canal Telegram actualizado a ACEPTADO_PROVEEDOR', $assertions);
 
 echo "\n========================================================\n";
 echo "CONCURRENCIA REAL VERIFICADA: {$assertions} ASERCIONES APROBADAS\n";

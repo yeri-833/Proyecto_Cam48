@@ -11,10 +11,18 @@
  *  6. Concurrencia real de trabajadores (insertOrIgnore).
  */
 
+require_once __DIR__ . '/DestructiveTestGuard.php';
+
+use Tests\Isolation\DestructiveTestGuard;
+
 $host = '127.0.0.1';
 $port = 3307;
 $user = 'root';
 $pass = '';
+
+$cliArgs = $argv ?? [];
+DestructiveTestGuard::guardDatabaseOperation($host, $port, 'familylock_mariadb_fresh', $cliArgs);
+DestructiveTestGuard::guardDatabaseOperation($host, $port, 'familylock_mariadb_upgrade', $cliArgs);
 
 $pdo = new PDO("mysql:host={$host};port={$port};charset=utf8mb4", $user, $pass, [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
