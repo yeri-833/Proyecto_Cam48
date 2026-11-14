@@ -219,4 +219,114 @@ class EstadisticasConvocatoriasAmbiguedadTest extends TestCase
             $this->assertEquals(100, $evData['porcentaje']);
         });
     }
+
+    public function test_combina_registros_historicos_y_explicitos_en_evento_unico_sin_duplicar(): void
+    {
+        $fecha = Carbon::today()->toDateString();
+
+        $evento = Evento::create([
+            'nombre_evento' => 'Junta Mixta Historica y Nueva',
+            'fecha_hora' => Carbon::today()->setTime(10, 0),
+        ]);
+
+        $al1 = Alumno::create(['matricula' => 'MIX_01', 'nombre' => 'Hugo', 'apellido' => 'Diaz', 'activo' => 1]);
+        $al2 = Alumno::create(['matricula' => 'MIX_02', 'nombre' => 'Paco', 'apellido' => 'Soto', 'activo' => 1]);
+
+        $tutor1 = Tutor::create(['matricula_alumno' => 'MIX_01', 't1_nombre' => 'Tutor Uno', 't1_telefono' => '9210010001']);
+        $tutor2 = Tutor::create(['matricula_alumno' => 'MIX_02', 't1_nombre' => 'Tutor Dos', 't1_telefono' => '9210010002']);
+
+        DB::table('evento_convocatorias')->insert([
+            ['evento_id' => $evento->id, 'tutor_id' => $tutor1->id, 'notificado' => true, 'asistio' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['evento_id' => $evento->id, 'tutor_id' => $tutor2->id, 'notificado' => true, 'asistio' => true, 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        // Tutor 1 tiene registro explícito con evento_id Y un registro duplicado + un histórico sin evento_id
+        RegistroAsistencia::create(['asistible_type' => Tutor::class, 'asistible_id' => (string) $tutor1->id, 'fecha' => $fecha, 'hora' => '10:01:00', 'evento_id' => $evento->id]);
+        RegistroAsistencia::create(['asistible_type' => Tutor::class, 'asistible_id' => (string) $tutor1->id, 'fecha' => $fecha, 'hora' => '10:02:00', 'evento_id' => $evento->id]);
+        RegistroAsistencia::create(['asistible_type' => Tutor::class, 'asistible_id' => (string) $tutor1->id, 'fecha' => $fecha, 'hora' => '10:03:00', 'evento_id' => null]);
+
+        // Tutor 2 solo tiene registro histórico sin evento_id
+        RegistroAsistencia::create(['asistible_type' => Tutor::class, 'asistible_id' => (string) $tutor2->id, 'fecha' => $fecha, 'hora' => '10:05:00', 'evento_id' => null]);
+
+        $response = $this->actingAs($this->admin)->get(route('estadisticas.index'));
+        $response->assertOk();
+
+        $response->assertInertia(function ($page) use ($evento) {
+            $props = $page->toArray()['props'];
+            $participacion = collect($props['participacionEventos']);
+            $evData = $participacion->firstWhere('id', $evento->id);
+
+            // 2 asistentes únicos (Tutor 1 explícito, Tutor 2 histórico), sin duplicar Tutor 1
+            $this->assertEquals(2, $evData['asistentes']);
+            $this->assertEquals(2, $evData['tutores_asistentes']);
+            $this->assertEquals(1, $evData['asistentes_explicitos']);
+            $this->assertEquals(1, $evData['asistentes_historicos']);
+            $this->assertEquals(0, $evData['registros_ambiguos']);
+            $this->assertFalse($evData['es_fecha_ambigua']);
+
+            // En el ranking, cada tutor cuenta exactamente 1 asistencia para esta junta
+            $ranking = collect($props['rankingTutores']);
+            $r1 = $ranking->firstWhere('nombre_tutor', 'TUTOR UNO');
+            $r2 = $ranking->firstWhere('nombre_tutor', 'TUTOR DOS');
+            $this->assertEquals(1, $r1['asistencias']);
+            $this->assertEquals(1, $r2['asistencias']);
+        });
+    }
+
+    public function test_evento_cancelado_o_eliminado_no_contamina_estadisticas_de_otro_evento_en_la_misma_fecha(): void
+    {
+        $fecha = Carbon::today()->toDateString();
+
+        $eventoActivo = Evento::create([
+            'nombre_evento' => 'Junta Activa',
+            'fecha_hora' => Carbon::today()->setTime(9, 0),
+        ]);
+
+        $eventoCancelado = Evento::create([
+            'nombre_evento' => 'Junta Cancelada',
+            'fecha_hora' => Carbon::today()->setTime(17, 0),
+        ]);
+
+        $alActivo = Alumno::create(['matricula' => 'ACT_01', 'nombre' => 'Ana', 'apellido' => 'Sol', 'activo' => 1]);
+        $alCancelado = Alumno::create(['matricula' => 'CAN_01', 'nombre' => 'Beto', 'apellido' => 'Mar', 'activo' => 1]);
+
+        $tutorActivo = Tutor::create(['matricula_alumno' => 'ACT_01', 't1_nombre' => 'Tutor Activo', 't1_telefono' => '9212220001']);
+        $tutorOtro = Tutor::create(['matricula_alumno' => 'CAN_01', 't1_nombre' => 'Tutor Otro', 't1_telefono' => '9212220002']);
+
+        // Solo tutorActivo está convocado a eventoActivo
+        DB::table('evento_convocatorias')->insert([
+            'evento_id' => $eventoActivo->id,
+            'tutor_id' => $tutorActivo->id,
+            'notificado' => true,
+            'asistio' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Registro de tutorOtro pertenecía al eventoCancelado (al eliminarse, evento_id pasa a NULL por nullOnDelete)
+        RegistroAsistencia::create([
+            'asistible_type' => Tutor::class,
+            'asistible_id' => (string) $tutorOtro->id,
+            'fecha' => $fecha,
+            'hora' => '17:05:00',
+            'evento_id' => $eventoCancelado->id,
+        ]);
+
+        // Cancelar/eliminar eventoCancelado
+        $eventoCancelado->delete();
+
+        $response = $this->actingAs($this->admin)->get(route('estadisticas.index'));
+        $response->assertOk();
+
+        $response->assertInertia(function ($page) use ($eventoActivo, $eventoCancelado) {
+            $participacion = collect($page->toArray()['props']['participacionEventos']);
+
+            $this->assertNull($participacion->firstWhere('id', $eventoCancelado->id));
+
+            $evData = $participacion->firstWhere('id', $eventoActivo->id);
+            $this->assertNotNull($evData);
+            // tutorOtro NO estaba convocado a eventoActivo, por lo que su asistencia huérfana no se le atribuye
+            $this->assertEquals(0, $evData['asistentes']);
+        });
+    }
 }

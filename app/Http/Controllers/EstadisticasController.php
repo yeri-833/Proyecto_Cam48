@@ -91,20 +91,40 @@ class EstadisticasController extends Controller
 
         // ─────────────────────────────────────────────────────────
         // 4. Ranking de Tutores más comprometidos (Top 20)
-        //    Deduplica escaneos duplicados en la misma junta o día (máximo 1 asistencia por sesión).
+        //    Deduplica escaneos duplicados y unifica registros históricos con evento único en la misma fecha.
         // ─────────────────────────────────────────────────────────
-        $driver = DB::connection()->getDriverName();
-        $castEvento = $driver === 'sqlite' ? 'CAST(evento_id AS TEXT)' : 'CAST(evento_id AS CHAR)';
-        $sesionExpr = "COALESCE({$castEvento}, fecha)";
+        $eventosPorFecha = Evento::all(['id', 'fecha_hora'])
+            ->groupBy(fn (Evento $ev): string => Carbon::parse($ev->fecha_hora)->toDateString());
 
-        $topTutoresRaw = RegistroAsistencia::where('asistible_type', Tutor::class)
-            ->select('asistible_id', DB::raw("{$sesionExpr} as sesion_id"))
-            ->distinct()
-            ->get()
-            ->groupBy('asistible_id')
-            ->map(fn ($group, $asistibleId) => (object) [
-                'asistible_id' => $asistibleId,
-                'asistencias' => $group->count(),
+        $registrosTutores = RegistroAsistencia::where('asistible_type', Tutor::class)
+            ->get(['asistible_id', 'evento_id', 'fecha']);
+
+        $sesionesPorTutor = [];
+        foreach ($registrosTutores as $reg) {
+            if (! is_numeric($reg->asistible_id)) {
+                continue;
+            }
+            $tutorId = (int) $reg->asistible_id;
+            $fechaStr = Carbon::parse($reg->fecha)->toDateString();
+
+            if ($reg->evento_id !== null) {
+                $sesionKey = 'ev:'.(int) $reg->evento_id;
+            } else {
+                $eventosFecha = $eventosPorFecha->get($fechaStr);
+                if ($eventosFecha !== null && $eventosFecha->count() === 1) {
+                    $sesionKey = 'ev:'.(int) $eventosFecha->first()->id;
+                } else {
+                    $sesionKey = 'fecha:'.$fechaStr;
+                }
+            }
+
+            $sesionesPorTutor[$tutorId][$sesionKey] = true;
+        }
+
+        $topTutoresRaw = collect($sesionesPorTutor)
+            ->map(fn (array $sesiones, int $tutorId): object => (object) [
+                'asistible_id' => $tutorId,
+                'asistencias' => count($sesiones),
             ])
             ->sortByDesc('asistencias')
             ->take(20)
@@ -112,7 +132,6 @@ class EstadisticasController extends Controller
 
         $tutorIds = $topTutoresRaw
             ->pluck('asistible_id')
-            ->filter(fn ($id) => is_numeric($id))
             ->map(fn ($id) => (int) $id)
             ->values()
             ->all();
@@ -124,8 +143,8 @@ class EstadisticasController extends Controller
 
         $rankingTutores = [];
         foreach ($topTutoresRaw as $registro) {
-            $tutorId = is_numeric($registro->asistible_id) ? (int) $registro->asistible_id : null;
-            $tutor = $tutorId ? $tutoresMap->get($tutorId) : null;
+            $tutorId = (int) $registro->asistible_id;
+            $tutor = $tutoresMap->get($tutorId);
 
             if ($tutor) {
                 $nombreAlumno = $tutor->nombres_alumnos;
@@ -188,31 +207,49 @@ class EstadisticasController extends Controller
                     $tutoresConvocadosCount = $totalFamiliasConvocadas;
                 }
 
-                // 2. Determinar asistencias reales deduplicadas
-                $asistenciasTutorIds = RegistroAsistencia::where('asistible_type', Tutor::class)
+                // 2. Determinar asistencias reales deduplicadas:
+                //    Priorizar siempre relación explícita por evento_id, y asociar registros históricos sin evento_id
+                //    únicamente cuando exista un solo evento en la fecha (y respetando convocatorias explícitas si existen).
+                $explicitosTutorIds = RegistroAsistencia::where('asistible_type', Tutor::class)
                     ->where('evento_id', $evento->id)
                     ->pluck('asistible_id')
                     ->filter(fn ($id) => is_numeric($id))
                     ->map(fn ($id) => (int) $id)
-                    ->unique();
+                    ->unique()
+                    ->values();
 
-                // Manejo riguroso de registros históricos sin evento_id:
-                // ÚNICAMENTE se permite el fallback por fecha si en esa fecha existió un único evento registrado.
-                // Si existieron múltiples juntas el mismo día, cualquier registro sin evento_id es ambiguo
-                // y NO debe atribuirse automáticamente a ninguna junta específica.
-                if ($asistenciasTutorIds->isEmpty()) {
-                    $eventosEnMismaFecha = Evento::whereDate('fecha_hora', $fechaEvento)->count();
+                $eventosEnMismaFecha = Evento::whereDate('fecha_hora', $fechaEvento)->count();
+                $historicosAsociadosIds = collect();
+                $registrosAmbiguosCount = 0;
 
-                    if ($eventosEnMismaFecha === 1) {
-                        $asistenciasTutorIds = RegistroAsistencia::where('asistible_type', Tutor::class)
-                            ->whereNull('evento_id')
-                            ->whereDate('fecha', $fechaEvento)
-                            ->pluck('asistible_id')
-                            ->filter(fn ($id) => is_numeric($id))
-                            ->map(fn ($id) => (int) $id)
-                            ->unique();
+                if ($eventosEnMismaFecha === 1) {
+                    $historicosQuery = RegistroAsistencia::where('asistible_type', Tutor::class)
+                        ->whereNull('evento_id')
+                        ->whereDate('fecha', $fechaEvento);
+
+                    if ($tieneConvocatoriasExplicitas) {
+                        $historicosQuery->whereIn('asistible_id', array_map('strval', $convocadosTutorIds));
                     }
+
+                    $historicosAsociadosIds = $historicosQuery
+                        ->pluck('asistible_id')
+                        ->filter(fn ($id) => is_numeric($id))
+                        ->map(fn ($id) => (int) $id)
+                        ->unique()
+                        ->diff($explicitosTutorIds)
+                        ->values();
+                } else {
+                    $registrosAmbiguosCount = RegistroAsistencia::where('asistible_type', Tutor::class)
+                        ->whereNull('evento_id')
+                        ->whereDate('fecha', $fechaEvento)
+                        ->distinct('asistible_id')
+                        ->count('asistible_id');
                 }
+
+                $asistenciasTutorIds = $explicitosTutorIds
+                    ->merge($historicosAsociadosIds)
+                    ->unique()
+                    ->values();
 
                 $tutoresAsistentes = Tutor::whereIn('id', $asistenciasTutorIds)->get();
                 $familiasAsistentes = $tutoresAsistentes->unique(fn ($t) => $this->getFamiliaKey($t))->count();
@@ -226,6 +263,10 @@ class EstadisticasController extends Controller
                     'tutores_convocados' => $tutoresConvocadosCount,
                     'asistentes' => $familiasAsistentes,
                     'tutores_asistentes' => $tutoresPersonasCount,
+                    'asistentes_explicitos' => $explicitosTutorIds->count(),
+                    'asistentes_historicos' => $historicosAsociadosIds->count(),
+                    'registros_ambiguos' => $registrosAmbiguosCount,
+                    'es_fecha_ambigua' => $eventosEnMismaFecha > 1,
                     'porcentaje' => $familiasConvocadasCount > 0 ? round(($familiasAsistentes / $familiasConvocadasCount) * 100) : 0,
                 ];
             });

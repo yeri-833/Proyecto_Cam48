@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property string|null $rol Rol heredado del esquema anterior (transición)
  * @property string $fecha Fecha del registro (YYYY-MM-DD)
  * @property string $hora Hora del registro (HH:MM:SS)
+ * @property int|null $evento_id FK opcional hacia eventos.id
  * @property string|null $modo_registro 'QR' | 'Manual' | etc.
  * @property int|null $total Conteo agregado en consultas estadísticas
  * @property int|null $asistencias Conteo agregado en consultas de ranking
