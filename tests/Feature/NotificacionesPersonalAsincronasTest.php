@@ -103,7 +103,7 @@ class NotificacionesPersonalAsincronasTest extends TestCase
             ->first();
 
         $this->assertNotNull($registro, 'Debe existir registro en notificaciones_procesadas');
-        $this->assertSame('ENTREGADO', $registro->estado);
+        $this->assertSame('ACEPTADO_PROVEEDOR', $registro->estado);
         $this->assertNotNull($registro->fecha_entrega);
     }
 
@@ -154,7 +154,7 @@ class NotificacionesPersonalAsincronasTest extends TestCase
             ->where('idempotency_key', $idempotencyKey)
             ->first();
 
-        $this->assertSame('ENTREGADO', $registroActualizado->estado);
+        $this->assertSame('ACEPTADO_PROVEEDOR', $registroActualizado->estado);
     }
 
     public function test_persistencia_recupera_tras_reinicio_de_worker_y_previene_duplicados_concurrencia(): void
@@ -188,7 +188,7 @@ class NotificacionesPersonalAsincronasTest extends TestCase
             ->get();
 
         $this->assertCount(1, $registros);
-        $this->assertSame('ENTREGADO', $registros->first()->estado);
+        $this->assertSame('ACEPTADO_PROVEEDOR', $registros->first()->estado);
     }
 
     public function test_recuperacion_de_registro_abandonado_en_proceso_por_caida_de_worker(): void
@@ -228,7 +228,7 @@ class NotificacionesPersonalAsincronasTest extends TestCase
             ->first();
 
         $this->assertNotNull($registro);
-        $this->assertSame('ENTREGADO', $registro->estado);
+        $this->assertSame('ACEPTADO_PROVEEDOR', $registro->estado);
         $this->assertEquals(2, $registro->intentos);
     }
 
