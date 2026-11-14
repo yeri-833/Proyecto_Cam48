@@ -24,7 +24,7 @@ return new class extends Migration
                 $table->timestamp('fecha_entrega')->nullable();
                 $table->timestamps();
 
-                $table->index(['destinatario_tipo', 'destinatario_id']);
+                $table->index(['destinatario_tipo', 'destinatario_id'], 'idx_notif_destinatario');
                 $table->index('estado');
             });
         }

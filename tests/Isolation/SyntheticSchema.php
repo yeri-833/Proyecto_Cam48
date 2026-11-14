@@ -110,6 +110,8 @@ final class SyntheticSchema
             $table->string('destinatario_id')->nullable();
             $table->string('canal')->nullable();
             $table->string('estado')->default('PENDIENTE');
+            $table->string('owner_token')->nullable();
+            $table->timestamp('lease_expires_at')->nullable();
             $table->unsignedInteger('intentos')->default(0);
             $table->text('ultimo_error')->nullable();
             $table->timestamp('fecha_entrega')->nullable();

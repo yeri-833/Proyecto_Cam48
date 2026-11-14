@@ -45,6 +45,9 @@ class NotificarAvisoPersonalJob implements ShouldQueue
     public function handle(TelegramService $telegramService): void
     {
         $hasPersistence = Schema::hasTable('notificaciones_procesadas');
+        $hasOwnerCol = $hasPersistence && Schema::hasColumn('notificaciones_procesadas', 'owner_token');
+        $ownerToken = bin2hex(random_bytes(16));
+        $leaseExpires = Carbon::now()->addMinutes(5);
 
         // 1. Verificación previa de idempotencia durable en base de datos
         if ($hasPersistence) {
@@ -64,7 +67,7 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             // Reserva atómica con constraint UNIQUE a nivel de motor de base de datos
             if (! $registro) {
                 try {
-                    DB::table('notificaciones_procesadas')->insert([
+                    $insertData = [
                         'idempotency_key' => $this->idempotencyKey,
                         'destinatario_tipo' => 'Personal',
                         'destinatario_id' => (string) $this->personal->id,
@@ -73,7 +76,13 @@ class NotificarAvisoPersonalJob implements ShouldQueue
                         'intentos' => 1,
                         'created_at' => Carbon::now(),
                         'updated_at' => Carbon::now(),
-                    ]);
+                    ];
+                    if ($hasOwnerCol) {
+                        $insertData['owner_token'] = $ownerToken;
+                        $insertData['lease_expires_at'] = $leaseExpires;
+                    }
+
+                    DB::table('notificaciones_procesadas')->insert($insertData);
                 } catch (\Illuminate\Database\QueryException $e) {
                     // Si otra solicitud concurrente ya insertó la clave, evaluar estado
                     $existente = DB::table('notificaciones_procesadas')
@@ -89,21 +98,15 @@ class NotificarAvisoPersonalJob implements ShouldQueue
                     }
 
                     if ($existente && $existente->estado === 'EN_PROCESO') {
-                        $updatedAt = $existente->updated_at ? Carbon::parse($existente->updated_at) : Carbon::now();
-                        // Detección y recuperación de trabajo abandonado/zombie (más de 5 minutos en proceso)
-                        if ($updatedAt->diffInMinutes(Carbon::now()) >= 5) {
-                            Log::warning('[NotificarAvisoPersonalJob] Registro abandonado en EN_PROCESO detectado; reclamando ejecución.', [
-                                'personal_id' => $this->personal->id,
-                                'key' => $this->idempotencyKey,
-                            ]);
-
-                            DB::table('notificaciones_procesadas')
-                                ->where('idempotency_key', $this->idempotencyKey)
-                                ->update([
-                                    'intentos' => DB::raw('intentos + 1'),
-                                    'updated_at' => Carbon::now(),
-                                ]);
+                        $leaseValido = false;
+                        if ($hasOwnerCol && ! empty($existente->lease_expires_at)) {
+                            $leaseValido = Carbon::now()->lt(Carbon::parse($existente->lease_expires_at));
                         } else {
+                            $updatedAt = $existente->updated_at ? Carbon::parse($existente->updated_at) : Carbon::now();
+                            $leaseValido = $updatedAt->diffInMinutes(Carbon::now()) < 5;
+                        }
+
+                        if ($leaseValido) {
                             Log::info('[NotificarAvisoPersonalJob] Procesamiento concurrente activo en DB, liberando trabajo.', [
                                 'personal_id' => $this->personal->id,
                             ]);
@@ -111,36 +114,77 @@ class NotificarAvisoPersonalJob implements ShouldQueue
 
                             return;
                         }
+
+                        // Reclamar trabajo abandonado
+                        Log::warning('[NotificarAvisoPersonalJob] Registro abandonado en EN_PROCESO detectado; reclamando ejecución.', [
+                            'personal_id' => $this->personal->id,
+                            'key' => $this->idempotencyKey,
+                        ]);
+
+                        $reclaimData = [
+                            'estado' => 'EN_PROCESO',
+                            'intentos' => DB::raw('intentos + 1'),
+                            'updated_at' => Carbon::now(),
+                        ];
+                        if ($hasOwnerCol) {
+                            $reclaimData['owner_token'] = $ownerToken;
+                            $reclaimData['lease_expires_at'] = $leaseExpires;
+                        }
+
+                        DB::table('notificaciones_procesadas')
+                            ->where('idempotency_key', $this->idempotencyKey)
+                            ->update($reclaimData);
                     }
                 }
             } else {
                 // Si ya existía: evaluar si está abandonado o si se está reintentando tras fallo
                 if ($registro->estado === 'EN_PROCESO') {
-                    $updatedAt = $registro->updated_at ? Carbon::parse($registro->updated_at) : Carbon::now();
-                    if ($updatedAt->diffInMinutes(Carbon::now()) >= 5) {
-                        Log::warning('[NotificarAvisoPersonalJob] Reclamando registro abandonado en EN_PROCESO.', [
-                            'personal_id' => $this->personal->id,
-                        ]);
-                        DB::table('notificaciones_procesadas')
-                            ->where('idempotency_key', $this->idempotencyKey)
-                            ->update([
-                                'intentos' => DB::raw('intentos + 1'),
-                                'updated_at' => Carbon::now(),
-                            ]);
+                    $leaseValido = false;
+                    if ($hasOwnerCol && ! empty($registro->lease_expires_at)) {
+                        $leaseValido = Carbon::now()->lt(Carbon::parse($registro->lease_expires_at));
                     } else {
+                        $updatedAt = $registro->updated_at ? Carbon::parse($registro->updated_at) : Carbon::now();
+                        $leaseValido = $updatedAt->diffInMinutes(Carbon::now()) < 5;
+                    }
+
+                    if ($leaseValido) {
                         $this->release(10);
 
                         return;
                     }
-                } else {
-                    // Estado FALLIDO o PENDIENTE: incrementar intento y pasar a EN_PROCESO
+
+                    Log::warning('[NotificarAvisoPersonalJob] Reclamando registro abandonado en EN_PROCESO.', [
+                        'personal_id' => $this->personal->id,
+                    ]);
+
+                    $reclaimData = [
+                        'estado' => 'EN_PROCESO',
+                        'intentos' => DB::raw('intentos + 1'),
+                        'updated_at' => Carbon::now(),
+                    ];
+                    if ($hasOwnerCol) {
+                        $reclaimData['owner_token'] = $ownerToken;
+                        $reclaimData['lease_expires_at'] = $leaseExpires;
+                    }
+
                     DB::table('notificaciones_procesadas')
                         ->where('idempotency_key', $this->idempotencyKey)
-                        ->update([
-                            'estado' => 'EN_PROCESO',
-                            'intentos' => DB::raw('intentos + 1'),
-                            'updated_at' => Carbon::now(),
-                        ]);
+                        ->update($reclaimData);
+                } else {
+                    // Estado FALLIDO o PENDIENTE: incrementar intento y pasar a EN_PROCESO
+                    $reclaimData = [
+                        'estado' => 'EN_PROCESO',
+                        'intentos' => DB::raw('intentos + 1'),
+                        'updated_at' => Carbon::now(),
+                    ];
+                    if ($hasOwnerCol) {
+                        $reclaimData['owner_token'] = $ownerToken;
+                        $reclaimData['lease_expires_at'] = $leaseExpires;
+                    }
+
+                    DB::table('notificaciones_procesadas')
+                        ->where('idempotency_key', $this->idempotencyKey)
+                        ->update($reclaimData);
                 }
             }
         }
@@ -148,13 +192,16 @@ class NotificarAvisoPersonalJob implements ShouldQueue
         // Si el docente no tiene Chat ID, se concluye sin error
         if (empty($this->personal->telegram_chat_id)) {
             if ($hasPersistence) {
-                DB::table('notificaciones_procesadas')
-                    ->where('idempotency_key', $this->idempotencyKey)
-                    ->update([
-                        'estado' => 'ENTREGADO',
-                        'fecha_entrega' => Carbon::now(),
-                        'updated_at' => Carbon::now(),
-                    ]);
+                $finishQuery = DB::table('notificaciones_procesadas')->where('idempotency_key', $this->idempotencyKey);
+                if ($hasOwnerCol) {
+                    $finishQuery->where('owner_token', $ownerToken);
+                }
+
+                $finishQuery->update([
+                    'estado' => 'ENTREGADO',
+                    'fecha_entrega' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ]);
             }
 
             return;
@@ -169,13 +216,16 @@ class NotificarAvisoPersonalJob implements ShouldQueue
 
             if (! $exito) {
                 if ($hasPersistence) {
-                    DB::table('notificaciones_procesadas')
-                        ->where('idempotency_key', $this->idempotencyKey)
-                        ->update([
-                            'estado' => 'FALLIDO',
-                            'ultimo_error' => 'Fallo temporal en transporte Telegram.',
-                            'updated_at' => Carbon::now(),
-                        ]);
+                    $failQuery = DB::table('notificaciones_procesadas')->where('idempotency_key', $this->idempotencyKey);
+                    if ($hasOwnerCol) {
+                        $failQuery->where('owner_token', $ownerToken);
+                    }
+
+                    $failQuery->update([
+                        'estado' => 'FALLIDO',
+                        'ultimo_error' => 'Fallo temporal en transporte Telegram.',
+                        'updated_at' => Carbon::now(),
+                    ]);
                 }
 
                 Log::warning('[NotificarAvisoPersonalJob] Reintentando envío de aviso a personal.', [
@@ -187,13 +237,16 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             }
 
             if ($hasPersistence) {
-                DB::table('notificaciones_procesadas')
-                    ->where('idempotency_key', $this->idempotencyKey)
-                    ->update([
-                        'estado' => 'ENTREGADO',
-                        'fecha_entrega' => Carbon::now(),
-                        'updated_at' => Carbon::now(),
-                    ]);
+                $finishQuery = DB::table('notificaciones_procesadas')->where('idempotency_key', $this->idempotencyKey);
+                if ($hasOwnerCol) {
+                    $finishQuery->where('owner_token', $ownerToken);
+                }
+
+                $finishQuery->update([
+                    'estado' => 'ENTREGADO',
+                    'fecha_entrega' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ]);
             }
 
             Log::info('[NotificarAvisoPersonalJob] Aviso entregado satisfactoriamente.', [
@@ -201,13 +254,16 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             ]);
         } catch (\Throwable $e) {
             if ($hasPersistence) {
-                DB::table('notificaciones_procesadas')
-                    ->where('idempotency_key', $this->idempotencyKey)
-                    ->update([
-                        'estado' => 'FALLIDO',
-                        'ultimo_error' => substr($e->getMessage(), 0, 500),
-                        'updated_at' => Carbon::now(),
-                    ]);
+                $failQuery = DB::table('notificaciones_procesadas')->where('idempotency_key', $this->idempotencyKey);
+                if ($hasOwnerCol) {
+                    $failQuery->where('owner_token', $ownerToken);
+                }
+
+                $failQuery->update([
+                    'estado' => 'FALLIDO',
+                    'ultimo_error' => substr($e->getMessage(), 0, 500),
+                    'updated_at' => Carbon::now(),
+                ]);
             }
 
             throw $e;
