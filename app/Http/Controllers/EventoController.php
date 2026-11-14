@@ -66,7 +66,7 @@ class EventoController extends Controller
             ]);
             $msg = 'Evento actualizado correctamente.';
         } else {
-            Evento::create([
+            $evento = Evento::create([
                 'nombre_evento' => $validated['nombre_evento'],
                 'fecha_hora' => $validated['fecha_hora'],
                 'ubicacion' => $validated['ubicacion'] ?? '',
@@ -81,7 +81,8 @@ class EventoController extends Controller
             $wsService->enviarAvisoEvento(
                 $validated['nombre_evento'],
                 $fechaFormateada,
-                $ubicacionFinal
+                $ubicacionFinal,
+                $evento->id
             );
 
             // 2. Envío al canal general institucional si está configurado

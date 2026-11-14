@@ -61,7 +61,7 @@ class WhatsAppService
     /**
      * Envía una notificación general sobre un nuevo evento encolando los envíos individuales (asíncrono).
      */
-    public function enviarAvisoEvento(string $nombreEvento, string $fecha, ?string $ubicacion): bool
+    public function enviarAvisoEvento(string $nombreEvento, string $fecha, ?string $ubicacion, ?int $eventoId = null): bool
     {
         $mensaje = "📅 *CAM #48 - Nuevo Evento Escolar*\n\n"
                  ."Se ha agendado una nueva actividad en la escuela:\n\n"
@@ -75,9 +75,9 @@ class WhatsAppService
         $mensaje .= "\n_Por favor, agéndelo. Le esperamos._";
 
         // Procesar en lotes de 100 para no saturar memoria RAM
-        Tutor::chunk(100, function ($tutores) use ($mensaje, $nombreEvento, $fecha, $ubicacion) {
+        Tutor::chunk(100, function ($tutores) use ($mensaje, $nombreEvento, $fecha, $ubicacion, $eventoId) {
             foreach ($tutores as $tutor) {
-                NotificarEventoTutorJob::dispatch($tutor, $mensaje, $nombreEvento, $fecha, $ubicacion ?? 'Por confirmar');
+                NotificarEventoTutorJob::dispatch($tutor, $mensaje, $nombreEvento, $fecha, $ubicacion ?? 'Por confirmar', $eventoId);
             }
         });
 
