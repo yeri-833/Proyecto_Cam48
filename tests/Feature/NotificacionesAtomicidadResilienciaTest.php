@@ -221,7 +221,7 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
         $this->assertSame('SIN_CANAL_DISPONIBLE', $registro->estado);
         $this->assertNull($registro->fecha_entrega);
         $detalle = json_decode((string) $registro->detalle_canales, true);
-        $this->assertSame('NO_CONFIGURADO', $detalle['telegram'] ?? null);
+        $this->assertSame('NO_CONFIGURADO', $detalle['telegram']['estado'] ?? $detalle['telegram'] ?? null);
     }
 
     public function test_asistencia_parcial_cuando_whatsapp_falla_y_telegram_acepta_preserva_ambos_resultados(): void
@@ -248,7 +248,12 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
         $tgMock->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
 
         $job = new \App\Jobs\NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Elena Vega', '2026-11-13');
-        $job->handle($wsMock, $tgMock);
+        try {
+            $job->handle($wsMock, $tgMock);
+            $this->fail('Debió lanzar RuntimeException para forzar reintento del canal pendiente');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('Entrega parcial', $e->getMessage());
+        }
 
         $registro = DB::table('notificaciones_procesadas')
             ->where('idempotency_key', $job->resolverIdempotencyKey())
@@ -258,8 +263,108 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
         $this->assertSame('PARCIAL', $registro->estado);
         $this->assertStringContainsString('WhatsApp', (string) $registro->ultimo_error);
         $detalle = json_decode((string) $registro->detalle_canales, true);
-        $this->assertSame('FALLIDO', $detalle['whatsapp'] ?? null);
-        $this->assertSame('ACEPTADO_PROVEEDOR', $detalle['telegram'] ?? null);
+        $this->assertSame('FALLIDO', $detalle['whatsapp']['estado'] ?? $detalle['whatsapp'] ?? null);
+        $this->assertSame('ACEPTADO_PROVEEDOR', $detalle['telegram']['estado'] ?? $detalle['telegram'] ?? null);
+    }
+
+    public function test_recuperacion_independiente_reintenta_solo_canal_fallido_sin_reenviar_el_ya_aceptado(): void
+    {
+        $alumno = \App\Models\Alumno::create([
+            'matricula' => 'ALUM_RECUP_01',
+            'nombre' => 'Mateo',
+            'apellido' => 'Sosa',
+            'activo' => true,
+        ]);
+
+        $tutor = \App\Models\Tutor::create([
+            'matricula_alumno' => $alumno->matricula,
+            't1_nombre' => 'Lorena Sosa',
+            't1_telefono' => '9217778899',
+            't1_telegram_chat_id' => '11224455',
+        ]);
+        $alumno->setRelation('tutor', $tutor);
+
+        // Intento 1: WhatsApp falla, Telegram es aceptado por el proveedor
+        $wsMock1 = Mockery::mock(\App\Services\WhatsAppService::class);
+        $wsMock1->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(false);
+
+        $tgMock1 = Mockery::mock(TelegramService::class);
+        $tgMock1->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+
+        $job1 = new \App\Jobs\NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Mateo Sosa', '2026-11-14');
+        try {
+            $job1->handle($wsMock1, $tgMock1);
+        } catch (\RuntimeException $e) {
+            // Esperado para reintento de cola
+        }
+
+        $reg1 = DB::table('notificaciones_procesadas')->where('idempotency_key', $job1->resolverIdempotencyKey())->first();
+        $this->assertSame('PARCIAL', $reg1->estado);
+
+        // Intento 2 (Reintento de la cola):
+        // REGLA FUNDAMENTAL: Telegram ya fue aceptado, por lo tanto NUNCA debe volver a llamarse
+        $tgMock2 = Mockery::mock(TelegramService::class);
+        $tgMock2->shouldNotReceive('enviarAvisoAsistencia');
+
+        // WhatsApp falló previamente, por lo que SÍ debe reintentarse
+        $wsMock2 = Mockery::mock(\App\Services\WhatsAppService::class);
+        $wsMock2->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+
+        $job2 = new \App\Jobs\NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Mateo Sosa', '2026-11-14');
+        $job2->handle($wsMock2, $tgMock2);
+
+        $reg2 = DB::table('notificaciones_procesadas')->where('idempotency_key', $job2->resolverIdempotencyKey())->first();
+        $this->assertSame('ACEPTADO_PROVEEDOR', $reg2->estado);
+        $det2 = json_decode((string) $reg2->detalle_canales, true);
+        $this->assertSame('ACEPTADO_PROVEEDOR', $det2['whatsapp']['estado'] ?? null);
+        $this->assertSame('ACEPTADO_PROVEEDOR', $det2['telegram']['estado'] ?? null);
+    }
+
+    public function test_canal_con_timeout_se_marca_como_incierto_y_no_se_duplica_en_siguiente_intento(): void
+    {
+        $alumno = \App\Models\Alumno::create([
+            'matricula' => 'ALUM_TIMEOUT_01',
+            'nombre' => 'Lucía',
+            'apellido' => 'Méndez',
+            'activo' => true,
+        ]);
+
+        $tutor = \App\Models\Tutor::create([
+            'matricula_alumno' => $alumno->matricula,
+            't1_nombre' => 'Roberto Méndez',
+            't1_telefono' => '9213334455',
+            't1_telegram_chat_id' => '66778899',
+        ]);
+        $alumno->setRelation('tutor', $tutor);
+
+        // Intento 1: WhatsApp sufre timeout de red (resultado incierto)
+        $wsMock1 = Mockery::mock(\App\Services\WhatsAppService::class);
+        $wsMock1->shouldReceive('enviarAvisoAsistencia')
+            ->once()
+            ->andThrow(new \RuntimeException('cURL error 28: Operation timed out after 5000 milliseconds'));
+
+        $tgMock1 = Mockery::mock(TelegramService::class);
+        $tgMock1->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+
+        $job1 = new \App\Jobs\NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Lucía Méndez', '2026-11-14');
+        $job1->handle($wsMock1, $tgMock1);
+
+        $reg1 = DB::table('notificaciones_procesadas')->where('idempotency_key', $job1->resolverIdempotencyKey())->first();
+        $det1 = json_decode((string) $reg1->detalle_canales, true);
+        $this->assertSame('INCIERTO', $det1['whatsapp']['estado'] ?? null);
+        $this->assertSame('ACEPTADO_PROVEEDOR', $det1['telegram']['estado'] ?? null);
+
+        // Intento 2: Como WhatsApp quedó en INCIERTO (y Telegram ACEPTADO), ningún canal debe ser reenviado
+        $wsMock2 = Mockery::mock(\App\Services\WhatsAppService::class);
+        $wsMock2->shouldNotReceive('enviarAvisoAsistencia');
+
+        $tgMock2 = Mockery::mock(TelegramService::class);
+        $tgMock2->shouldNotReceive('enviarAvisoAsistencia');
+
+        $job2 = new \App\Jobs\NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Lucía Méndez', '2026-11-14');
+        $job2->handle($wsMock2, $tgMock2);
+
+        $this->addToAssertionCount(1);
     }
 
     public function test_failed_no_sobreescribe_lease_activo_de_otro_worker_ni_estado_completado(): void

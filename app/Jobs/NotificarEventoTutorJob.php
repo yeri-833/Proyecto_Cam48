@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 
 class NotificarEventoTutorJob implements ShouldQueue
 {
@@ -66,7 +67,6 @@ class NotificarEventoTutorJob implements ShouldQueue
     public function handle(WhatsAppService $whatsappService, TelegramService $telegramService): void
     {
         // Requisito estricto: si falta el identificador explícito del evento, detener de forma segura.
-        // Nunca utilizar el nombre del evento ni actualizar convocatorias de manera ambigua.
         if ($this->eventoId === null || $this->eventoId <= 0) {
             Log::warning('[NotificarEventoTutorJob] Deteniendo ejecución de forma segura: falta eventoId explícito.', [
                 'tutor_id' => $this->tutor->id ?? null,
@@ -84,6 +84,11 @@ class NotificarEventoTutorJob implements ShouldQueue
             'MULTICANAL'
         );
 
+        // POLÍTICA FAIL-CLOSED ESTRICTA: Sin tabla de persistencia, abortar inmediatamente sin contactar proveedores
+        if ($estadoLease === 'NO_TABLE') {
+            throw new RuntimeException("PERSISTENCIA OBLIGATORIA: La tabla 'notificaciones_procesadas' no existe. Notificación de evento abortada para prevenir envíos duplicados o no auditados.");
+        }
+
         if ($estadoLease === 'ALREADY_COMPLETED') {
             Log::info("[NotificarEventoTutorJob] Notificación ya procesada para tutor {$this->tutor->id} en evento {$this->eventoId}, omitiendo duplicado.");
 
@@ -99,71 +104,96 @@ class NotificarEventoTutorJob implements ShouldQueue
             return;
         }
 
-        $detalleCanales = [
-            'whatsapp' => 'NO_CONFIGURADO',
-            'telegram' => 'NO_CONFIGURADO',
-            'email' => 'NO_CONFIGURADO',
-        ];
-
         try {
-            $canalesIntentados = 0;
-            $canalesExitosos = 0;
+            $canalesConfigurados = 0;
             $erroresCanales = [];
 
-            // 1. Enviar WhatsApp en segundo plano
-            if (! empty($this->tutor->t1_telefono)) {
-                $telefonoLimpio = preg_replace('/[^0-9]/', '', $this->tutor->t1_telefono);
-                if (! empty($telefonoLimpio)) {
-                    $canalesIntentados++;
-                    $resWs = $whatsappService->enviarMensajeDirecto($telefonoLimpio, $this->mensajeWhatsapp);
-                    if ($resWs) {
-                        $canalesExitosos++;
-                        $detalleCanales['whatsapp'] = self::ESTADO_ACEPTADO_PROVEEDOR;
-                    } else {
-                        $detalleCanales['whatsapp'] = self::ESTADO_FALLIDO;
-                        $erroresCanales[] = 'WhatsApp: proveedor rechazó el envío o devolvió error';
+            // 1. WhatsApp
+            $telefonoLimpio = ! empty($this->tutor->t1_telefono)
+                ? preg_replace('/[^0-9]/', '', (string) $this->tutor->t1_telefono)
+                : '';
+            $tieneTelefono = ! empty($telefonoLimpio);
+
+            if ($tieneTelefono) {
+                $canalesConfigurados++;
+                if ($this->debeProcesarCanal('whatsapp')) {
+                    try {
+                        $resWs = $whatsappService->enviarMensajeDirecto($telefonoLimpio, $this->mensajeWhatsapp);
+                        if ($resWs) {
+                            $this->registrarResultadoCanal('whatsapp', self::CANAL_ACEPTADO);
+                        } else {
+                            $this->registrarResultadoCanal('whatsapp', self::CANAL_FALLIDO, 'WhatsApp: proveedor rechazó el envío');
+                            $erroresCanales[] = 'WhatsApp: proveedor rechazó el envío';
+                        }
+                    } catch (\Throwable $eWs) {
+                        $estadoWs = $this->esErrorIncierto($eWs->getMessage()) ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
+                        $this->registrarResultadoCanal('whatsapp', $estadoWs, $eWs->getMessage());
+                        $erroresCanales[] = 'WhatsApp: '.$eWs->getMessage();
                     }
                 }
-            }
-
-            // 2. Enviar Telegram en segundo plano (si el tutor tiene Chat ID registrado)
-            if (! empty($this->tutor->t1_telegram_chat_id)) {
-                $canalesIntentados++;
-                $resTg = $telegramService->enviarAvisoEventoDirecto(
-                    $this->tutor->t1_telegram_chat_id,
-                    $this->nombreEvento,
-                    $this->fecha,
-                    $this->ubicacion
-                );
-                if ($resTg) {
-                    $canalesExitosos++;
-                    $detalleCanales['telegram'] = self::ESTADO_ACEPTADO_PROVEEDOR;
-                } else {
-                    $detalleCanales['telegram'] = self::ESTADO_FALLIDO;
-                    $erroresCanales[] = 'Telegram: proveedor rechazó el envío o devolvió error';
+            } else {
+                if (! $this->isCanalAceptado('whatsapp')) {
+                    $this->registrarResultadoCanal('whatsapp', self::CANAL_NO_CONFIGURADO);
                 }
             }
 
-            // 3. Enviar Correo en segundo plano
-            if (! empty($this->tutor->t1_email)) {
-                $canalesIntentados++;
-                try {
-                    Mail::to($this->tutor->t1_email)
-                        ->send(new AvisoEventoMail($this->nombreEvento, $this->fecha, $this->ubicacion));
-                    $canalesExitosos++;
-                    $detalleCanales['email'] = self::ESTADO_ACEPTADO_PROVEEDOR;
-                } catch (\Throwable $eMail) {
-                    $detalleCanales['email'] = self::ESTADO_FALLIDO;
-                    $erroresCanales[] = 'Email: '.$eMail->getMessage();
-                    Log::error('[Mail] [FALLIDO] Error al enviar correo de evento institucional: '.$eMail->getMessage());
+            // 2. Telegram (si el tutor tiene Chat ID registrado)
+            $tieneTelegram = ! empty($this->tutor->t1_telegram_chat_id);
+            if ($tieneTelegram) {
+                $canalesConfigurados++;
+                if ($this->debeProcesarCanal('telegram')) {
+                    try {
+                        $resTg = $telegramService->enviarAvisoEventoDirecto(
+                            $this->tutor->t1_telegram_chat_id,
+                            $this->nombreEvento,
+                            $this->fecha,
+                            $this->ubicacion
+                        );
+                        if ($resTg) {
+                            $this->registrarResultadoCanal('telegram', self::CANAL_ACEPTADO);
+                        } else {
+                            $this->registrarResultadoCanal('telegram', self::CANAL_FALLIDO, 'Telegram: proveedor rechazó el envío');
+                            $erroresCanales[] = 'Telegram: proveedor rechazó el envío';
+                        }
+                    } catch (\Throwable $eTg) {
+                        $estadoTg = $this->esErrorIncierto($eTg->getMessage()) ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
+                        $this->registrarResultadoCanal('telegram', $estadoTg, $eTg->getMessage());
+                        $erroresCanales[] = 'Telegram: '.$eTg->getMessage();
+                    }
+                }
+            } else {
+                if (! $this->isCanalAceptado('telegram')) {
+                    $this->registrarResultadoCanal('telegram', self::CANAL_NO_CONFIGURADO);
                 }
             }
 
-            // Si no había ningún canal configurado, registrar SIN_CANAL_DISPONIBLE y no marcar notificado
-            if ($canalesIntentados === 0) {
+            // 3. Email
+            $tieneEmail = ! empty($this->tutor->t1_email);
+            if ($tieneEmail) {
+                $canalesConfigurados++;
+                if ($this->debeProcesarCanal('email')) {
+                    try {
+                        Mail::to($this->tutor->t1_email)
+                            ->send(new AvisoEventoMail($this->nombreEvento, $this->fecha, $this->ubicacion));
+                        $this->registrarResultadoCanal('email', self::CANAL_ACEPTADO);
+                    } catch (\Throwable $eMail) {
+                        $estadoMail = $this->esErrorIncierto($eMail->getMessage()) ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
+                        $this->registrarResultadoCanal('email', $estadoMail, $eMail->getMessage());
+                        $erroresCanales[] = 'Email: '.$eMail->getMessage();
+                        Log::error('[Mail] [FALLIDO] Error al enviar correo de evento: '.$eMail->getMessage());
+                    }
+                }
+            } else {
+                if (! $this->isCanalAceptado('email')) {
+                    $this->registrarResultadoCanal('email', self::CANAL_NO_CONFIGURADO);
+                }
+            }
+
+            // Si no había ningún canal configurado
+            if ($canalesConfigurados === 0) {
                 $this->completeNotificationLease(
                     self::ESTADO_SIN_CANAL,
-                    $detalleCanales,
+                    [],
                     'Tutor sin canales de mensajería configurados.',
                     false
                 );
@@ -171,33 +201,45 @@ class NotificarEventoTutorJob implements ShouldQueue
                 return;
             }
 
-            // Si se intentaron canales y ninguno tuvo éxito, fallar para reintentar
-            if ($canalesExitosos === 0) {
-                $detalles = implode(' | ', $erroresCanales);
-                $this->failNotificationLease("Fallo de entrega en todos los canales disponibles: {$detalles}", $detalleCanales);
-                throw new \RuntimeException("Fallo de entrega en todos los canales disponibles: {$detalles}");
-            }
+            $hayAceptado = $this->isCanalAceptado('whatsapp')
+                || $this->isCanalAceptado('telegram')
+                || $this->isCanalAceptado('email');
 
-            // 4. Finalizar lease con estado real (ACEPTADO_PROVEEDOR o PARCIAL) solo si seguimos siendo propietarios
-            $estadoFinal = ($canalesExitosos < $canalesIntentados)
-                ? self::ESTADO_PARCIAL
-                : self::ESTADO_ACEPTADO_PROVEEDOR;
+            $hayFallido = ($tieneTelefono && $this->getEstadoCanal('whatsapp') === self::CANAL_FALLIDO)
+                || ($tieneTelegram && $this->getEstadoCanal('telegram') === self::CANAL_FALLIDO)
+                || ($tieneEmail && $this->getEstadoCanal('email') === self::CANAL_FALLIDO);
 
             $ultimoError = ! empty($erroresCanales) ? implode(' | ', $erroresCanales) : null;
 
-            $leaseConfirmado = $estadoLease === 'NO_TABLE'
-                ? true
-                : $this->completeNotificationLease($estadoFinal, $detalleCanales, $ultimoError, true);
-
-            // 5. Confirmar notificación en convocatoria restringiendo estrictamente a este evento_id y tutor_id
-            if ($leaseConfirmado && Schema::hasTable('evento_convocatorias')) {
+            // Confirmar en convocatoria si al menos un canal fue aceptado
+            if ($hayAceptado && Schema::hasTable('evento_convocatorias')) {
                 DB::table('evento_convocatorias')
                     ->where('evento_id', $this->eventoId)
                     ->where('tutor_id', $this->tutor->id)
                     ->update(['notificado' => true, 'updated_at' => now()]);
             }
+
+            // Caso 1: Todos los canales configurados fueron aceptados (o sin fallos)
+            if (! $hayFallido && $hayAceptado) {
+                $this->completeNotificationLease(self::ESTADO_ACEPTADO_PROVEEDOR, [], null, true);
+
+                return;
+            }
+
+            // Caso 2: Entrega parcial (al menos un canal fue aceptado pero otro falló)
+            if ($hayAceptado) {
+                $this->saveInterimLeaseState(self::ESTADO_PARCIAL, $ultimoError);
+                throw new RuntimeException("Entrega parcial en evento {$this->eventoId} para tutor {$this->tutor->id}: {$ultimoError}");
+            }
+
+            // Caso 3: Fallo en todos los canales intentados
+            $this->saveInterimLeaseState(self::ESTADO_FALLIDO, $ultimoError);
+            throw new RuntimeException("Fallo de entrega en todos los canales disponibles: {$ultimoError}");
         } catch (\Throwable $e) {
-            $this->failNotificationLease($e->getMessage(), $detalleCanales);
+            Log::error('Error en NotificarEventoTutorJob: '.$e->getMessage(), [
+                'tutor_id' => $this->tutor->id ?? null,
+                'evento_id' => $this->eventoId,
+            ]);
 
             throw $e;
         }

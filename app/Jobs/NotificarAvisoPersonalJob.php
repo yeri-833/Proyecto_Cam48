@@ -11,6 +11,7 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class NotificarAvisoPersonalJob implements ShouldQueue
 {
@@ -49,6 +50,11 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             'Telegram'
         );
 
+        // POLÍTICA FAIL-CLOSED ESTRICTA: Sin tabla de persistencia, abortar inmediatamente sin contactar proveedores
+        if ($estadoLease === 'NO_TABLE') {
+            throw new RuntimeException("PERSISTENCIA OBLIGATORIA: La tabla 'notificaciones_procesadas' no existe. Notificación a personal abortada para prevenir envíos duplicados o no auditados.");
+        }
+
         if ($estadoLease === 'ALREADY_COMPLETED') {
             Log::info('[NotificarAvisoPersonalJob] Notificación omitida por duplicado ya procesado (persistencia DB).', [
                 'personal_id' => $this->personal->id,
@@ -69,11 +75,12 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             return;
         }
 
-        // Si el personal no tiene Chat ID configurado, no se afirma entrega: se registra SIN_CANAL_DISPONIBLE
+        // Si el personal no tiene Chat ID configurado, registrar SIN_CANAL_DISPONIBLE
         if (empty($this->personal->telegram_chat_id)) {
+            $this->registrarResultadoCanal('telegram', self::CANAL_NO_CONFIGURADO);
             $this->completeNotificationLease(
                 self::ESTADO_SIN_CANAL,
-                ['telegram' => 'NO_CONFIGURADO'],
+                [],
                 'Personal sin telegram_chat_id configurado.',
                 false
             );
@@ -81,6 +88,12 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             Log::info('[NotificarAvisoPersonalJob] Sin canal disponible para notificar al personal.', [
                 'personal_id' => $this->personal->id,
             ]);
+
+            return;
+        }
+
+        if (! $this->debeProcesarCanal('telegram')) {
+            Log::info('[NotificarAvisoPersonalJob] Canal telegram ya previamente procesado o en incertidumbre, omitiendo envío.');
 
             return;
         }
@@ -93,22 +106,21 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             );
 
             if (! $exito) {
-                $this->failNotificationLease(
-                    'Fallo temporal en transporte Telegram.',
-                    ['telegram' => 'FALLIDO']
-                );
+                $this->registrarResultadoCanal('telegram', self::CANAL_FALLIDO, 'Fallo en transporte Telegram');
+                $this->saveInterimLeaseState(self::ESTADO_FALLIDO, 'Fallo en transporte Telegram');
 
                 Log::warning('[NotificarAvisoPersonalJob] Reintentando envío de aviso a personal.', [
                     'personal_id' => $this->personal->id,
                     'intento' => $this->attempts(),
                 ]);
 
-                throw new \RuntimeException("Fallo temporal al enviar aviso a personal {$this->personal->id}");
+                throw new RuntimeException("Fallo temporal al enviar aviso a personal {$this->personal->id}");
             }
 
+            $this->registrarResultadoCanal('telegram', self::CANAL_ACEPTADO);
             $this->completeNotificationLease(
                 self::ESTADO_ACEPTADO_PROVEEDOR,
-                ['telegram' => 'ACEPTADO_PROVEEDOR'],
+                [],
                 null,
                 true
             );
@@ -117,7 +129,11 @@ class NotificarAvisoPersonalJob implements ShouldQueue
                 'personal_id' => $this->personal->id,
             ]);
         } catch (\Throwable $e) {
-            $this->failNotificationLease($e->getMessage(), ['telegram' => 'FALLIDO']);
+            $esIncierto = $this->esErrorIncierto($e->getMessage());
+            $estadoTg = $esIncierto ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
+            $this->registrarResultadoCanal('telegram', $estadoTg, $e->getMessage());
+
+            $this->failNotificationLease($e->getMessage(), []);
 
             throw $e;
         }

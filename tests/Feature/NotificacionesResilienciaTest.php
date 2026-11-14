@@ -183,7 +183,11 @@ class NotificacionesResilienciaTest extends TestCase
         ]);
 
         $job = new NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Alumno Resiliente');
-        $job->handle(new WhatsAppService, new TelegramService);
+        try {
+            $job->handle(new WhatsAppService, new TelegramService);
+        } catch (\RuntimeException $e) {
+            // Esperado: entrega parcial lanza excepción para forzar reintento en cola de Laravel
+        }
 
         // WhatsApp fue enviado con éxito
         Http::assertSent(function ($request) {
@@ -233,12 +237,20 @@ class NotificacionesResilienciaTest extends TestCase
         $job = new NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Alumno Duplicado');
 
         // Intento 1: WhatsApp tiene éxito, Telegram falla
-        $job->handle(new WhatsAppService, new TelegramService);
+        try {
+            $job->handle(new WhatsAppService, new TelegramService);
+        } catch (\RuntimeException $e) {
+            // Esperado: entrega parcial fuerza reintento
+        }
         $this->assertSame(1, $whatsappCalls, 'WhatsApp debe haberse ejecutado 1 vez en el intento 1.');
 
         // Simulación de reintento del worker (Intento 2):
         // Con la tabla notificaciones_procesadas e idempotencia duradera, WhatsApp no se repite
-        $job->handle(new WhatsAppService, new TelegramService);
+        try {
+            $job->handle(new WhatsAppService, new TelegramService);
+        } catch (\RuntimeException $e) {
+            // Esperado: Telegram sigue fallando
+        }
         $this->assertSame(1, $whatsappCalls, 'Idempotencia confirmada: En el intento 2, WhatsApp no se ejecutó nuevamente.');
     }
 }
