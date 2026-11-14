@@ -41,10 +41,15 @@ return new class extends Migration
 
             // Migrar datos existentes desde tutores.matricula_alumno si existen registros históricos
             if (Schema::hasTable('tutores') && Schema::hasColumn('tutores', 'matricula_alumno')) {
+                $columnas = ['id', 'matricula_alumno'];
+                if (Schema::hasColumn('tutores', 't1_parentesco')) {
+                    $columnas[] = 't1_parentesco';
+                }
+
                 $registros = DB::table('tutores')
                     ->whereNotNull('matricula_alumno')
                     ->where('matricula_alumno', '!=', '')
-                    ->get(['id', 'matricula_alumno', 't1_parentesco']);
+                    ->get($columnas);
 
                 foreach ($registros as $reg) {
                     // Validar si el alumno existe en caso de que existan claves foráneas activas
@@ -56,7 +61,7 @@ return new class extends Migration
                         DB::table('alumno_tutor')->insertOrIgnore([
                             'tutor_id' => $reg->id,
                             'alumno_matricula' => $reg->matricula_alumno,
-                            'parentesco' => $reg->t1_parentesco ?? null,
+                            'parentesco' => property_exists($reg, 't1_parentesco') ? $reg->t1_parentesco : null,
                             'es_tutor_principal' => true,
                             'created_at' => now(),
                             'updated_at' => now(),
