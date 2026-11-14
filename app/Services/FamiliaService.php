@@ -54,8 +54,8 @@ class FamiliaService
         $matriculas = array_values(array_unique(array_filter($matriculas)));
 
         if (! empty($matriculas)) {
-            // Expandir a hermanos que compartan tutores con estos alumnos
-            $matriculasGrupo = $this->expandirMatriculasHermanos($matriculas);
+            // Expandir de forma exhaustiva el componente conexo completo de alumnos y tutores
+            $matriculasGrupo = $this->expandirComponenteConexoAlumnos($matriculas, [$tutor->id]);
             sort($matriculasGrupo);
 
             return 'FAM:' . implode(',', $matriculasGrupo);
@@ -74,9 +74,7 @@ class FamiliaService
      */
     public function obtenerClaveFamiliaAlumno(Alumno $alumno): string
     {
-        $matriculas = [(string) $alumno->matricula];
-
-        $matriculasGrupo = $this->expandirMatriculasHermanos($matriculas);
+        $matriculasGrupo = $this->expandirComponenteConexoAlumnos([(string) $alumno->matricula]);
         sort($matriculasGrupo);
 
         return 'FAM:' . implode(',', $matriculasGrupo);
@@ -112,36 +110,120 @@ class FamiliaService
     }
 
     /**
-     * Expande recursivamente el grafo de hermanos a través de tutores compartidos en alumno_tutor.
+     * Expande de forma exhaustiva el componente conexo completo del grafo bipartito Alumnos <-> Tutores (BFS).
      *
-     * @param array<string> $matriculasIniciales
-     * @return array<string>
+     * Invariante matemático:
+     * Si el Tutor A atiende al Alumno 1, el Tutor B atiende a los Alumnos 1 y 2,
+     * el Tutor C atiende a los Alumnos 2 y 3, y el Tutor D atiende al Alumno 3,
+     * todos pertenecen al mismo componente conexo escolar y resuelven la misma clave FAM:1,2,3
+     * independientemente del tutor o alumno desde el que se inicie la consulta.
+     *
+     * @param array<string> $matriculasSemilla
+     * @param array<int> $tutoresSemilla
+     * @return array<string> Matrículas pertenecientes al componente conexo completo ordenadas lexicográficamente
      */
-    private function expandirMatriculasHermanos(array $matriculasIniciales): array
+    private function expandirComponenteConexoAlumnos(array $matriculasSemilla, array $tutoresSemilla = []): array
     {
-        if (! Schema::hasTable('alumno_tutor') || empty($matriculasIniciales)) {
-            return $matriculasIniciales;
+        $alumnosVisitados = [];
+        $tutoresVisitados = [];
+
+        $colaAlumnos = [];
+        $colaTutores = [];
+
+        foreach ($matriculasSemilla as $m) {
+            $mStr = trim((string) $m);
+            if ($mStr !== '' && ! isset($alumnosVisitados[$mStr])) {
+                $alumnosVisitados[$mStr] = true;
+                $colaAlumnos[] = $mStr;
+            }
         }
 
-        // Obtener todos los tutores que atienden a estas matrículas
-        $tutorIds = DB::table('alumno_tutor')
-            ->whereIn('alumno_matricula', $matriculasIniciales)
-            ->pluck('tutor_id')
-            ->unique()
-            ->all();
-
-        if (empty($tutorIds)) {
-            return $matriculasIniciales;
+        foreach ($tutoresSemilla as $tId) {
+            $tInt = (int) $tId;
+            if ($tInt > 0 && ! isset($tutoresVisitados[$tInt])) {
+                $tutoresVisitados[$tInt] = true;
+                $colaTutores[] = $tInt;
+            }
         }
 
-        // Obtener todos los alumnos que son atendidos por esos mismos tutores
-        $todasMatriculas = DB::table('alumno_tutor')
-            ->whereIn('tutor_id', $tutorIds)
-            ->pluck('alumno_matricula')
-            ->map(fn ($m) => (string) $m)
-            ->unique()
-            ->all();
+        $tieneAlumnoTutor = Schema::hasTable('alumno_tutor');
+        $tieneTutores = Schema::hasTable('tutores');
+        $tieneMatriculaCol = $tieneTutores && Schema::hasColumn('tutores', 'matricula_alumno');
 
-        return array_values(array_unique(array_merge($matriculasIniciales, $todasMatriculas)));
+        while (! empty($colaAlumnos) || ! empty($colaTutores)) {
+            // 1. Procesar alumnos pendientes en la cola para descubrir tutores adyacentes
+            if (! empty($colaAlumnos)) {
+                $loteAlumnos = $colaAlumnos;
+                $colaAlumnos = [];
+
+                $tutoresEncontrados = [];
+
+                if ($tieneAlumnoTutor) {
+                    $fromPivot = DB::table('alumno_tutor')
+                        ->whereIn('alumno_matricula', $loteAlumnos)
+                        ->pluck('tutor_id')
+                        ->map(fn ($id) => (int) $id)
+                        ->all();
+                    $tutoresEncontrados = array_merge($tutoresEncontrados, $fromPivot);
+                }
+
+                if ($tieneMatriculaCol) {
+                    $fromLegacy = DB::table('tutores')
+                        ->whereIn('matricula_alumno', $loteAlumnos)
+                        ->pluck('id')
+                        ->map(fn ($id) => (int) $id)
+                        ->all();
+                    $tutoresEncontrados = array_merge($tutoresEncontrados, $fromLegacy);
+                }
+
+                foreach ($tutoresEncontrados as $tId) {
+                    if ($tId > 0 && ! isset($tutoresVisitados[$tId])) {
+                        $tutoresVisitados[$tId] = true;
+                        $colaTutores[] = $tId;
+                    }
+                }
+            }
+
+            // 2. Procesar tutores pendientes en la cola para descubrir alumnos adyacentes (hermanos)
+            if (! empty($colaTutores)) {
+                $loteTutores = $colaTutores;
+                $colaTutores = [];
+
+                $alumnosEncontrados = [];
+
+                if ($tieneAlumnoTutor) {
+                    $fromPivot = DB::table('alumno_tutor')
+                        ->whereIn('tutor_id', $loteTutores)
+                        ->pluck('alumno_matricula')
+                        ->map(fn ($m) => (string) $m)
+                        ->all();
+                    $alumnosEncontrados = array_merge($alumnosEncontrados, $fromPivot);
+                }
+
+                if ($tieneMatriculaCol) {
+                    $fromLegacy = DB::table('tutores')
+                        ->whereIn('id', $loteTutores)
+                        ->whereNotNull('matricula_alumno')
+                        ->where('matricula_alumno', '!=', '')
+                        ->pluck('matricula_alumno')
+                        ->map(fn ($m) => (string) $m)
+                        ->all();
+                    $alumnosEncontrados = array_merge($alumnosEncontrados, $fromLegacy);
+                }
+
+                foreach ($alumnosEncontrados as $mat) {
+                    $matStr = trim((string) $mat);
+                    if ($matStr !== '' && ! isset($alumnosVisitados[$matStr])) {
+                        $alumnosVisitados[$matStr] = true;
+                        $colaAlumnos[] = $matStr;
+                    }
+                }
+            }
+        }
+
+        $resultado = array_keys($alumnosVisitados);
+        sort($resultado);
+
+        return $resultado;
     }
 }
