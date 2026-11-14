@@ -92,6 +92,7 @@ assertCondition($freshSchema->hasTable('evento_convocatorias'), "Tabla evento_co
 assertCondition($freshSchema->hasColumn('registros_asistencia', 'evento_id'), "Columna evento_id presente en registros_asistencia", $assertions);
 assertCondition($freshSchema->hasColumn('notificaciones_procesadas', 'owner_token'), "Columna owner_token presente en notificaciones_procesadas", $assertions);
 assertCondition($freshSchema->hasColumn('notificaciones_procesadas', 'lease_expires_at'), "Columna lease_expires_at presente en notificaciones_procesadas", $assertions);
+assertCondition($freshSchema->hasColumn('notificaciones_procesadas', 'detalle_canales'), "Columna detalle_canales presente en notificaciones_procesadas", $assertions);
 
 // Probar inserción y restricciones foráneas reales en la base limpia
 $freshConn->table('alumnos')->insert([
@@ -207,7 +208,7 @@ $pdoRaw->exec("
     ) ENGINE=InnoDB;
 ");
 
-// Insertar datos históricos sensibles
+// Insertar datos históricos sensibles (incluyendo nulos, vacíos y matrícula inexistente)
 $pdoRaw->exec("
     INSERT INTO alumnos (matricula, nombre, apellido, activo) VALUES
         ('HIST_01', 'Carlitos', 'Perez', 1),
@@ -217,7 +218,10 @@ $pdoRaw->exec("
     INSERT INTO tutores (id, matricula_alumno, t1_nombre, t1_telefono) VALUES
         (101, 'HIST_01', 'MARIA PEREZ', '9211234567'),
         (102, 'HIST_02', 'MARIA PEREZ', '9211234567'),
-        (103, 'HIST_03', 'RAMON GOMEZ', '9217654321');
+        (103, 'HIST_03', 'RAMON GOMEZ', '9217654321'),
+        (104, NULL, 'TUTOR SIN ALUMNO NULO', '9210000001'),
+        (105, '', 'TUTOR SIN ALUMNO VACIO', '9210000002'),
+        (106, 'MATRICULA_INEXISTENTE', 'TUTOR HUERFANO', '9210000003');
 
     INSERT INTO eventos (id, nombre_evento, fecha_hora) VALUES
         (501, 'Junta Trimestral Historica', '2026-09-20 09:00:00');
@@ -253,6 +257,7 @@ $migrationsToApply = [
     '2026_11_08_000000_create_alumno_tutor_table.php',
     '2026_11_08_000001_create_evento_convocatorias_table.php',
     '2026_11_13_000000_add_owner_token_to_notificaciones_procesadas_table.php',
+    '2026_11_13_000001_add_detalle_canales_to_notificaciones_procesadas_table.php',
 ];
 
 // Establecer conexión por defecto temporalmente para que las migraciones anónimas usen mariadb_upgrade
@@ -274,27 +279,56 @@ assertCondition($registrosHistoricos->count() === 3, "Los 3 registros histórico
 assertCondition($registrosHistoricos[0]->id == 1 && $registrosHistoricos[0]->asistible_id === '101', "Registro histórico 1 íntegro", $assertions);
 assertCondition($registrosHistoricos[0]->evento_id === null, "Columna evento_id agregada con valor NULL para registros preexistentes", $assertions);
 
-// 2. Verificar que los 3 alumnos históricos existen intactos
+// 2. Verificar que los alumnos y tutores históricos existen intactos con sus identificadores
 assertCondition($upgradeConn->table('alumnos')->count() === 3, "Los 3 alumnos históricos existen intactos", $assertions);
+assertCondition($upgradeConn->table('tutores')->count() === 6, "Los 6 tutores históricos existen intactos (incluyendo nulos/huérfanos)", $assertions);
 
-// 3. Verificar que los 3 tutores históricos existen intactos
-assertCondition($upgradeConn->table('tutores')->count() === 3, "Los 3 tutores históricos existen intactos", $assertions);
+// 3. Verificar que el BACKFILL AUTOMÁTICO de create_alumno_tutor_table pobló exactamente las 3 relaciones válidas SIN inserción manual
+assertCondition($upgradeConn->table('alumno_tutor')->count() === 3, "Backfill automático creó exactamente 3 relaciones válidas en alumno_tutor", $assertions);
+assertCondition(
+    $upgradeConn->table('alumno_tutor')->where('tutor_id', 101)->where('alumno_matricula', 'HIST_01')->exists()
+    && $upgradeConn->table('alumno_tutor')->where('tutor_id', 102)->where('alumno_matricula', 'HIST_02')->exists()
+    && $upgradeConn->table('alumno_tutor')->where('tutor_id', 103)->where('alumno_matricula', 'HIST_03')->exists(),
+    "Backfill automático preservó las tuplas (101->HIST_01, 102->HIST_02, 103->HIST_03)",
+    $assertions
+);
+assertCondition(
+    $upgradeConn->table('alumno_tutor')->whereIn('tutor_id', [104, 105, 106])->count() === 0,
+    "Backfill automático omitió valores nulos, vacíos y matrículas inexistentes sin fallar",
+    $assertions
+);
 
-// 4. Verificar que alumno_tutor migró o puede poblarse con datos históricos
-$upgradeConn->table('alumno_tutor')->insertOrIgnore([
-    ['tutor_id' => 101, 'alumno_matricula' => 'HIST_01', 'es_tutor_principal' => 1, 'created_at' => now(), 'updated_at' => now()],
-    ['tutor_id' => 102, 'alumno_matricula' => 'HIST_02', 'es_tutor_principal' => 1, 'created_at' => now(), 'updated_at' => now()],
-    ['tutor_id' => 103, 'alumno_matricula' => 'HIST_03', 'es_tutor_principal' => 1, 'created_at' => now(), 'updated_at' => now()],
-]);
-assertCondition($upgradeConn->table('alumno_tutor')->count() === 3, "Población de alumno_tutor preservando relaciones existentes", $assertions);
+// 4. Probar restricción UNIQUE en alumno_tutor ante relación duplicada en actualización
+$duplicadoUpgradeFallido = false;
+try {
+    $upgradeConn->table('alumno_tutor')->insert([
+        'tutor_id' => 101,
+        'alumno_matricula' => 'HIST_01',
+        'es_tutor_principal' => 0,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+} catch (\Exception $e) {
+    $duplicadoUpgradeFallido = true;
+}
+assertCondition($duplicadoUpgradeFallido, "Restricción UNIQUE (tutor_id, alumno_matricula) activa en esquema actualizado", $assertions);
 
-// 5. Verificar que notificaciones_procesadas tiene los nuevos campos owner_token y lease_expires_at
+// 5. Verificar que notificaciones_procesadas tiene owner_token, lease_expires_at, detalle_canales e índice idx_notif_destinatario
 assertCondition($upgradeSchema->hasColumn('notificaciones_procesadas', 'owner_token'), "owner_token agregado exitosamente en actualización", $assertions);
 assertCondition($upgradeSchema->hasColumn('notificaciones_procesadas', 'lease_expires_at'), "lease_expires_at agregado exitosamente en actualización", $assertions);
+assertCondition($upgradeSchema->hasColumn('notificaciones_procesadas', 'detalle_canales'), "detalle_canales agregado exitosamente en actualización", $assertions);
+$indicesNotif = $upgradeConn->select("SHOW INDEX FROM notificaciones_procesadas WHERE Key_name = 'idx_notif_destinatario'");
+assertCondition(count($indicesNotif) >= 2, "Índice compuesto idx_notif_destinatario verificado en MariaDB", $assertions);
 
-// 6. Probar rollback de la última migración (add_owner_token) y re-aplicación (idempotencia)
+// 6. Probar rollback de las últimas migraciones y re-aplicación (idempotencia)
 echo "\n--- Probando Reversibilidad (Rollback) y Re-aplicación ---\n";
 DB::setDefaultConnection('mariadb_upgrade');
+$detalleMigration = require database_path('migrations/2026_11_13_000001_add_detalle_canales_to_notificaciones_procesadas_table.php');
+$detalleMigration->down();
+assertCondition(!$upgradeSchema->hasColumn('notificaciones_procesadas', 'detalle_canales'), "Rollback de add_detalle_canales eliminó la columna", $assertions);
+$detalleMigration->up();
+assertCondition($upgradeSchema->hasColumn('notificaciones_procesadas', 'detalle_canales'), "Re-aplicación de add_detalle_canales restableció la columna sin errores", $assertions);
+
 $lastMigration = require database_path('migrations/2026_11_13_000000_add_owner_token_to_notificaciones_procesadas_table.php');
 $lastMigration->down();
 assertCondition(!$upgradeSchema->hasColumn('notificaciones_procesadas', 'owner_token'), "Rollback de add_owner_token eliminó la columna", $assertions);
