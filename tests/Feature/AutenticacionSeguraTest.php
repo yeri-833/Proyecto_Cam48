@@ -173,4 +173,44 @@ class AutenticacionSeguraTest extends TestCase
         $response->assertSessionHasErrors('current_password');
         $this->assertTrue(Hash::check('clave_real_123', $user->fresh()->password));
     }
+    /**
+     * Verifica que el rol histórico "Directivo" conserve sus permisos administrativos.
+     */
+    public function test_rol_directivo_se_reconoce_como_administrador_y_personal(): void
+    {
+        $directivo = User::create([
+            'nombre_completo' => 'Directivo Compatibilidad',
+            'correo' => 'directivo_compatibilidad@cam48.edu.mx',
+            'password' => Hash::make('password123'),
+            'tipo_usuario' => 'Directivo',
+        ]);
+
+        $this->assertTrue($directivo->isAdmin());
+        $this->assertTrue($directivo->isPersonal());
+    }
+
+    /**
+     * Verifica que un Directivo autenticado pueda abrir el Dashboard y que /login
+     * lo redirija correctamente en lugar de terminar en una respuesta 403.
+     */
+    public function test_directivo_autenticado_puede_abrir_dashboard_y_login_no_produce_403(): void
+    {
+        $directivo = User::create([
+            'nombre_completo' => 'Directivo Dashboard',
+            'correo' => 'directivo_dashboard@cam48.edu.mx',
+            'password' => Hash::make('password123'),
+            'tipo_usuario' => 'Directivo',
+            'email_verified_at' => now(),
+        ]);
+
+        $loginResponse = $this->actingAs($directivo)->get('/login');
+        $loginResponse->assertRedirect();
+        $this->assertSame(
+            '/dashboard',
+            parse_url((string) $loginResponse->headers->get('Location'), PHP_URL_PATH)
+        );
+
+        $this->get('/dashboard')->assertOk();
+    }
+
 }

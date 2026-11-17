@@ -116,13 +116,14 @@ class User extends Authenticatable
     }
 
     /**
-     * Comprueba si el usuario tiene rol administrativo (Director, Administrador, Admin).
+     * Comprueba si el usuario tiene rol administrativo (Director, Directivo, Administrador o Admin).
      */
     public function isAdmin(): bool
     {
-        $role = strtolower($this->role);
+        // Normaliza espacios y mayúsculas para reconocer los valores históricos del rol.
+        $role = strtolower(trim($this->role));
 
-        return in_array($role, ['admin', 'administrador', 'director']);
+        return in_array($role, ['admin', 'administrador', 'director', 'directivo'], true);
     }
 
     /**
