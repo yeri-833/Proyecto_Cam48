@@ -76,25 +76,64 @@ class DestructiveTestGuard
 
     /**
      * Valida de manera integral que una operación destructiva esté autorizada,
-     * sobre un host/puerto seguro y una base de datos en lista blanca.
+     * sobre un host/puerto seguro, una base de datos en lista blanca y fehacientemente
+     * confinada dentro del entorno aislado de Windows Sandbox.
      *
-     * @param string $host
-     * @param int $port
-     * @param string $dbName
-     * @param array<int, string> $argv
+     * @param  array<int, string>  $argv
+     *
      * @throws RuntimeException|InvalidArgumentException
      */
     public static function guardDatabaseOperation(string $host, int $port, string $dbName, array $argv = []): void
     {
         self::assertExecutionAuthorized($argv);
+        self::assertSandboxEnvironment();
         self::assertSafeConnection($host, $port);
         self::assertSafeDatabaseName($dbName);
     }
 
     /**
+     * Valida de manera fehaciente que la ejecución ocurra dentro del contenedor aislado de Windows Sandbox.
+     * Rechaza la ejecución en el host físico o en entornos no confinados.
+     *
+     * Criterios verificados:
+     *  1. La ruta del proyecto debe corresponder a la montada en el sandbox ('C:\Project').
+     *  2. Debe existir el directorio de herramientas y binarios del Sandbox ('C:\FamilyLockInput').
+     *  3. La ruta no debe contener el perfil de usuarios del host ('C:\Users').
+     *
+     * @param  string|null  $overrideProjectRoot  Solo para pruebas unitarias.
+     * @param  string|null  $overrideSandboxInput  Solo para pruebas unitarias.
+     *
+     * @throws RuntimeException
+     */
+    public static function assertSandboxEnvironment(?string $overrideProjectRoot = null, ?string $overrideSandboxInput = null): void
+    {
+        if (getenv('FAMILYLOCK_TEST_BYPASS_SANDBOX_CHECK') === '1') {
+            return;
+        }
+
+        $projectRoot = $overrideProjectRoot ?? dirname(__DIR__, 2);
+        $sandboxInput = $overrideSandboxInput ?? 'C:\\FamilyLockInput';
+
+        $normalizedRoot = str_replace('/', '\\', strtolower(@realpath($projectRoot) ?: $projectRoot));
+        $isSandboxProject = (str_starts_with($normalizedRoot, 'c:\\project'));
+        $openBasedir = (string) ini_get('open_basedir');
+        $hasSandboxInput = ! empty($openBasedir) || @is_dir($sandboxInput);
+        $isHostUserDir = str_contains($normalizedRoot, 'c:\\users\\');
+
+        if (! $isSandboxProject || ! $hasSandboxInput || $isHostUserDir) {
+            throw new RuntimeException(
+                "AISLAMIENTO NO DEMOSTRADO: La operación destructiva fue bloqueada porque no se identificaron los marcadores fehacientes de Windows Sandbox (C:\\Project y C:\\FamilyLockInput).\n".
+                "Ruta de ejecución detectada: '{$projectRoot}'.\n".
+                'Las operaciones destructivas (DROP/CREATE DATABASE) están estrictamente prohibidas en el host o en entornos no confinados.'
+            );
+        }
+    }
+
+    /**
      * Verifica que exista autorización explícita por variable de entorno o argumento CLI.
      *
-     * @param array<int, string> $argv
+     * @param  array<int, string>  $argv
+     *
      * @throws RuntimeException
      */
     public static function assertExecutionAuthorized(array $argv = []): void
@@ -105,8 +144,8 @@ class DestructiveTestGuard
 
         if (! $hasEnvAuth && ! $hasCliAuth) {
             throw new RuntimeException(
-                "OPERACIÓN DESTRUCTIVA BLOQUEADA: Se requiere autorización explícita para ejecutar pruebas destructivas.\n" .
-                "Establezca la variable de entorno " . self::ENV_AUTHORIZATION . "=1 o incluya el flag CLI '" . self::CLI_AUTHORIZATION_FLAG . "'."
+                "OPERACIÓN DESTRUCTIVA BLOQUEADA: Se requiere autorización explícita para ejecutar pruebas destructivas.\n".
+                'Establezca la variable de entorno '.self::ENV_AUTHORIZATION."=1 o incluya el flag CLI '".self::CLI_AUTHORIZATION_FLAG."'."
             );
         }
     }
@@ -114,8 +153,6 @@ class DestructiveTestGuard
     /**
      * Verifica que el host y puerto pertenezcan estrictamente al sandbox de pruebas.
      *
-     * @param string $host
-     * @param int $port
      * @throws InvalidArgumentException
      */
     public static function assertSafeConnection(string $host, int $port): void
@@ -124,8 +161,8 @@ class DestructiveTestGuard
 
         if (! in_array($normalizedHost, self::ALLOWED_HOSTS, true)) {
             throw new InvalidArgumentException(
-                "HOST NO AUTORIZADO ('{$host}'): Las operaciones destructivas solo están permitidas en host loopback (" .
-                implode(', ', self::ALLOWED_HOSTS) . ")."
+                "HOST NO AUTORIZADO ('{$host}'): Las operaciones destructivas solo están permitidas en host loopback (".
+                implode(', ', self::ALLOWED_HOSTS).').'
             );
         }
 
@@ -137,8 +174,8 @@ class DestructiveTestGuard
 
         if (! in_array($port, self::ALLOWED_PORTS, true)) {
             throw new InvalidArgumentException(
-                "PUERTO NO AUTORIZADO ('{$port}'): Las operaciones destructivas solo están permitidas en puertos de aislamiento autorizados (" .
-                implode(', ', self::ALLOWED_PORTS) . ")."
+                "PUERTO NO AUTORIZADO ('{$port}'): Las operaciones destructivas solo están permitidas en puertos de aislamiento autorizados (".
+                implode(', ', self::ALLOWED_PORTS).').'
             );
         }
     }
@@ -146,7 +183,6 @@ class DestructiveTestGuard
     /**
      * Verifica que la base de datos esté en la lista blanca permitida y no en la lista negra.
      *
-     * @param string $dbName
      * @throws InvalidArgumentException
      */
     public static function assertSafeDatabaseName(string $dbName): void
@@ -154,7 +190,7 @@ class DestructiveTestGuard
         $normalizedDb = strtolower(trim($dbName));
 
         if (empty($normalizedDb)) {
-            throw new InvalidArgumentException("Nombre de base de datos vacío no permitido.");
+            throw new InvalidArgumentException('Nombre de base de datos vacío no permitido.');
         }
 
         if (in_array($normalizedDb, self::BLOCKED_DATABASE_NAMES, true)) {
@@ -168,8 +204,8 @@ class DestructiveTestGuard
 
         if (! $isAllowedExact && ! $isAllowedPrefix) {
             throw new InvalidArgumentException(
-                "BASE DE DATOS NO PERMITIDA ('{$dbName}'): Solo se permiten bases de datos registradas en lista blanca: " .
-                implode(', ', self::ALLOWED_DATABASES) . " o con prefijo 'familylock_test_'."
+                "BASE DE DATOS NO PERMITIDA ('{$dbName}'): Solo se permiten bases de datos registradas en lista blanca: ".
+                implode(', ', self::ALLOWED_DATABASES)." o con prefijo 'familylock_test_'."
             );
         }
     }

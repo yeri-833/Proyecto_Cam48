@@ -77,7 +77,7 @@ class NotificarAvisoPersonalJob implements ShouldQueue
 
         // Si el personal no tiene Chat ID configurado, registrar SIN_CANAL_DISPONIBLE
         if (empty($this->personal->telegram_chat_id)) {
-            $this->registrarResultadoCanal('telegram', self::CANAL_NO_CONFIGURADO);
+            $this->registrarYPersistirCanal('telegram', self::CANAL_NO_CONFIGURADO);
             $this->completeNotificationLease(
                 self::ESTADO_SIN_CANAL,
                 [],
@@ -93,7 +93,14 @@ class NotificarAvisoPersonalJob implements ShouldQueue
         }
 
         if (! $this->debeProcesarCanal('telegram')) {
-            Log::info('[NotificarAvisoPersonalJob] Canal telegram ya previamente procesado o en incertidumbre, omitiendo envío.');
+            $estadoCanal = $this->getEstadoCanal('telegram');
+            $estadoNotif = ($estadoCanal === self::CANAL_INCIERTO) ? self::ESTADO_INCIERTO : self::ESTADO_ACEPTADO_PROVEEDOR;
+            $this->completeNotificationLease($estadoNotif, [], 'Canal previamente procesado o en incertidumbre', ($estadoNotif === self::ESTADO_ACEPTADO_PROVEEDOR));
+
+            Log::info('[NotificarAvisoPersonalJob] Canal telegram ya previamente procesado o en incertidumbre, omitiendo envío.', [
+                'personal_id' => $this->personal->id,
+                'estado_canal' => $estadoCanal,
+            ]);
 
             return;
         }
@@ -106,7 +113,7 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             );
 
             if (! $exito) {
-                $this->registrarResultadoCanal('telegram', self::CANAL_FALLIDO, 'Fallo en transporte Telegram');
+                $this->registrarYPersistirCanal('telegram', self::CANAL_FALLIDO, 'Fallo en transporte Telegram');
                 $this->saveInterimLeaseState(self::ESTADO_FALLIDO, 'Fallo en transporte Telegram');
 
                 Log::warning('[NotificarAvisoPersonalJob] Reintentando envío de aviso a personal.', [
@@ -117,7 +124,7 @@ class NotificarAvisoPersonalJob implements ShouldQueue
                 throw new RuntimeException("Fallo temporal al enviar aviso a personal {$this->personal->id}");
             }
 
-            $this->registrarResultadoCanal('telegram', self::CANAL_ACEPTADO);
+            $this->registrarYPersistirCanal('telegram', self::CANAL_ACEPTADO);
             $this->completeNotificationLease(
                 self::ESTADO_ACEPTADO_PROVEEDOR,
                 [],
@@ -130,10 +137,26 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             ]);
         } catch (\Throwable $e) {
             $esIncierto = $this->esErrorIncierto($e->getMessage());
-            $estadoTg = $esIncierto ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
-            $this->registrarResultadoCanal('telegram', $estadoTg, $e->getMessage());
+            if ($esIncierto) {
+                $this->registrarYPersistirCanal('telegram', self::CANAL_INCIERTO, $e->getMessage());
+                $this->completeNotificationLease(
+                    self::ESTADO_INCIERTO,
+                    [],
+                    'Resultado incierto por timeout de transporte: '.$e->getMessage(),
+                    false
+                );
 
-            $this->failNotificationLease($e->getMessage(), []);
+                Log::warning('[NotificarAvisoPersonalJob] Notificación de personal marcada como INCIERTO tras timeout de red.', [
+                    'personal_id' => $this->personal->id,
+                    'key' => $this->idempotencyKey,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return;
+            }
+
+            $this->registrarYPersistirCanal('telegram', self::CANAL_FALLIDO, $e->getMessage());
+            $this->saveInterimLeaseState(self::ESTADO_FALLIDO, $e->getMessage());
 
             throw $e;
         }

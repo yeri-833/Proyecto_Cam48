@@ -318,6 +318,33 @@ trait InteractsWithNotificationLease
     }
 
     /**
+     * Registra en memoria y persiste de inmediato en base de datos el resultado de un canal individual.
+     * Garantiza que si el proceso sufre una interrupción o corte intempestivo entre canales,
+     * la aceptación del proveedor ya esté registrada y no se vuelva a enviar en el siguiente intento.
+     */
+    protected function registrarYPersistirCanal(string $canal, string $estado, ?string $error = null): void
+    {
+        $this->registrarResultadoCanal($canal, $estado, $error);
+
+        if (! $this->activeIdempotencyKey || ! Schema::hasTable('notificaciones_procesadas') || ! Schema::hasColumn('notificaciones_procesadas', 'detalle_canales')) {
+            return;
+        }
+
+        $query = DB::table('notificaciones_procesadas')
+            ->where('idempotency_key', $this->activeIdempotencyKey)
+            ->where('estado', self::ESTADO_EN_PROCESO);
+
+        if (Schema::hasColumn('notificaciones_procesadas', 'owner_token') && $this->activeOwnerToken !== null) {
+            $query->where('owner_token', $this->activeOwnerToken);
+        }
+
+        $query->update([
+            'detalle_canales' => json_encode($this->canalesPersistidos, JSON_UNESCAPED_UNICODE),
+            'updated_at' => Carbon::now(),
+        ]);
+    }
+
+    /**
      * Evalúa si una excepción o mensaje corresponde a un resultado incierto (timeout de red).
      */
     protected function esErrorIncierto(?string $error): bool

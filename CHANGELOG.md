@@ -2,9 +2,32 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo. El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [SemVer (Versionamiento Semántico)](https://semver.org/lang/es/).
 
-## [1.4.8] - 2026-11-08
+## [1.4.8] - 2026-11-16
 
-### Limpieza Integral, Optimización y Estandarización Profesional
+### Auditoría de Cierre, Atomicidad y Estabilización de Notificaciones
+- **Resolución Estricta de Estados de Notificación Multicanal con Incertidumbre**:
+  - Combinaciones de canales con resultados mixtos como `ACEPTADO_PROVEEDOR + INCIERTO` e `INCIERTO + ACEPTADO_PROVEEDOR` ahora resuelven formal y estrictamente a estado global `PARCIAL`. Se erradica por completo la promoción prematura o indebida a `ACEPTADO_PROVEEDOR` mientras existan canales pendientes o en duda de transporte.
+  - Notificaciones donde todos los canales configurados resultan en `INCIERTO` resuelven a estado global `INCIERTO`, previniendo bucles ciegos de reintento ante caídas masivas de conectividad o puertos bloqueados.
+  - Solo cuando la totalidad de los canales configurados son confirmados por sus proveedores externos, la notificación se promueve a `ACEPTADO_PROVEEDOR`.
+- **Persistencia Inmediata por Canal (`registrarYPersistirCanal`)**:
+  - Implementación del método `registrarYPersistirCanal(string $canal, string $estado, ?string $error = null)` en `InteractsWithNotificationLease.php`.
+  - Inmediatamente tras recibir confirmación exitosa de un proveedor externo (WhatsApp, Telegram o Email), el estado se persiste en MariaDB (`detalle_canales`) en tiempo real.
+  - Si el proceso worker muere o es interrumpido abruptamente antes de culminar el resto de los canales, el reintento posterior detecta el canal aceptado y jamás lo reenvía (`debeProcesarCanal` = `false`).
+- **Resiliencia en Avisos Personales ante Timeout (`NotificarAvisoPersonalJob`)**:
+  - Ante un timeout de red o socket con Telegram, el trabajo registra el canal como `INCIERTO`, actualiza el estado global de la notificación a `INCIERTO` y libera el lease atómico sin relanzar excepciones no controladas que provoquen bucles de cola infinitos.
+- **Detección Factual de Windows Sandbox en `DestructiveTestGuard`**:
+  - Incorporación de `assertSandboxEnvironment()` en `tests/Isolation/DestructiveTestGuard.php`.
+  - Validación de marcadores reales de contenedor aislado: existencia de `C:\Project`, `C:\FamilyLockInput` y comprobación estricta de ausencia de rutas de usuario del host (`C:\Users\`).
+  - Bloqueo categórico e inquebrantable de operaciones destructivas (`DROP`, `TRUNCATE`, `CREATE DATABASE`) si no se acredita de forma fehaciente la ejecución dentro de Windows Sandbox.
+- **Ampliación de Pruebas de Regresión y Atomicidad**:
+  - Adición de 4 nuevas pruebas en `tests/Feature/NotificacionesAtomicidadResilienciaTest.php` cubriendo:
+    1. Resolución estricta de `ACEPTADO_PROVEEDOR + INCIERTO` a `PARCIAL`.
+    2. Resolución de todos los canales en `INCIERTO` a `INCIERTO`.
+    3. Persistencia inmediata tras interrupción intempestiva del worker sin reenviar mensajes previos en el reintento.
+    4. Timeout en Telegram para `NotificarAvisoPersonalJob` culminando en `INCIERTO`.
+  - Adición de pruebas de validación de entorno virtualizado en `tests/Unit/DestructiveTestGuardTest.php`.
+
+### Limpieza Integral, Optimización y Estandarización Profesional (Intervención Previa)
 - **Recuperación Independiente de Notificaciones Multicanal y Deduplicación**:
   - Exclusión de los estados `PARCIAL` y `SIN_CANAL_DISPONIBLE` de `$estadosCompletados` en `InteractsWithNotificationLease.php`, permitiendo la reclamación atómica de notificaciones incompletas para reintentos sin bloquear canales pendientes.
   - Gestión estructurada y granular en `detalle_canales` (JSON) registrando estado, intentos, último error y fecha de aceptación para cada canal (`whatsapp`, `telegram`, `email`).

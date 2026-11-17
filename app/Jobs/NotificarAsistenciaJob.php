@@ -111,20 +111,20 @@ class NotificarAsistenciaJob implements ShouldQueue
                             $this->tipoPase
                         );
                         if ($resWs) {
-                            $this->registrarResultadoCanal('whatsapp', self::CANAL_ACEPTADO);
+                            $this->registrarYPersistirCanal('whatsapp', self::CANAL_ACEPTADO);
                         } else {
-                            $this->registrarResultadoCanal('whatsapp', self::CANAL_FALLIDO, 'WhatsApp: no confirmado por el proveedor');
+                            $this->registrarYPersistirCanal('whatsapp', self::CANAL_FALLIDO, 'WhatsApp: no confirmado por el proveedor');
                             $errores[] = 'WhatsApp: no confirmado por el proveedor';
                         }
                     } catch (\Throwable $eWs) {
                         $estadoWs = $this->esErrorIncierto($eWs->getMessage()) ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
-                        $this->registrarResultadoCanal('whatsapp', $estadoWs, $eWs->getMessage());
+                        $this->registrarYPersistirCanal('whatsapp', $estadoWs, $eWs->getMessage());
                         $errores[] = 'WhatsApp: '.$eWs->getMessage();
                     }
                 }
             } else {
                 if (! $this->isCanalAceptado('whatsapp')) {
-                    $this->registrarResultadoCanal('whatsapp', self::CANAL_NO_CONFIGURADO);
+                    $this->registrarYPersistirCanal('whatsapp', self::CANAL_NO_CONFIGURADO);
                 }
             }
 
@@ -141,20 +141,20 @@ class NotificarAsistenciaJob implements ShouldQueue
                             $this->tipoPase
                         );
                         if ($resTg) {
-                            $this->registrarResultadoCanal('telegram', self::CANAL_ACEPTADO);
+                            $this->registrarYPersistirCanal('telegram', self::CANAL_ACEPTADO);
                         } else {
-                            $this->registrarResultadoCanal('telegram', self::CANAL_FALLIDO, 'Telegram: no confirmado por el proveedor');
+                            $this->registrarYPersistirCanal('telegram', self::CANAL_FALLIDO, 'Telegram: no confirmado por el proveedor');
                             $errores[] = 'Telegram: no confirmado por el proveedor';
                         }
                     } catch (\Throwable $eTg) {
                         $estadoTg = $this->esErrorIncierto($eTg->getMessage()) ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
-                        $this->registrarResultadoCanal('telegram', $estadoTg, $eTg->getMessage());
+                        $this->registrarYPersistirCanal('telegram', $estadoTg, $eTg->getMessage());
                         $errores[] = 'Telegram: '.$eTg->getMessage();
                     }
                 }
             } else {
                 if (! $this->isCanalAceptado('telegram')) {
-                    $this->registrarResultadoCanal('telegram', self::CANAL_NO_CONFIGURADO);
+                    $this->registrarYPersistirCanal('telegram', self::CANAL_NO_CONFIGURADO);
                 }
             }
 
@@ -169,28 +169,52 @@ class NotificarAsistenciaJob implements ShouldQueue
                 return;
             }
 
-            $hayAceptado = $this->isCanalAceptado('whatsapp') || $this->isCanalAceptado('telegram');
-            $hayFallido = ($tieneTelefono && $this->getEstadoCanal('whatsapp') === self::CANAL_FALLIDO)
-                || ($tieneTelegram && $this->getEstadoCanal('telegram') === self::CANAL_FALLIDO);
+            $wsAceptado = $tieneTelefono && $this->isCanalAceptado('whatsapp');
+            $tgAceptado = $tieneTelegram && $this->isCanalAceptado('telegram');
+            $wsIncierto = $tieneTelefono && $this->isCanalIncierto('whatsapp');
+            $tgIncierto = $tieneTelegram && $this->isCanalIncierto('telegram');
+            $wsFallido = $tieneTelefono && $this->getEstadoCanal('whatsapp') === self::CANAL_FALLIDO;
+            $tgFallido = $tieneTelegram && $this->getEstadoCanal('telegram') === self::CANAL_FALLIDO;
 
-            // Si todos los configurados fueron aceptados (o inciertos seguros)
-            if (! $hayFallido && $hayAceptado) {
+            $aceptados = ($wsAceptado ? 1 : 0) + ($tgAceptado ? 1 : 0);
+            $inciertos = ($wsIncierto ? 1 : 0) + ($tgIncierto ? 1 : 0);
+            $fallidos = ($wsFallido ? 1 : 0) + ($tgFallido ? 1 : 0);
+
+            // 1. Éxito total: todos los canales configurados fueron aceptados
+            if ($aceptados === $canalesConfigurados) {
                 $this->completeNotificationLease(self::ESTADO_ACEPTADO_PROVEEDOR, [], null, true);
 
                 return;
             }
 
-            $ultimoError = ! empty($errores) ? implode(' | ', $errores) : 'Fallo en canales de notificación';
+            $ultimoError = ! empty($errores) ? implode(' | ', $errores) : 'Fallo o incertidumbre en canales de notificación';
 
-            if ($hayAceptado) {
-                // Recuperación parcial: guardar estado intermedio y lanzar excepción para que la cola reintente solo los pendientes
-                $this->saveInterimLeaseState(self::ESTADO_PARCIAL, $ultimoError);
-                throw new RuntimeException("Entrega parcial en asistencia para {$this->alumno->matricula}: {$ultimoError}");
+            // 2. Al menos un canal fue aceptado
+            if ($aceptados > 0) {
+                if ($fallidos > 0) {
+                    $this->saveInterimLeaseState(self::ESTADO_PARCIAL, $ultimoError);
+                    throw new RuntimeException("Entrega parcial en asistencia para {$this->alumno->matricula}: {$ultimoError}");
+                }
+
+                // Sin fallidos pero con canales inciertos: estado global PARCIAL (nunca ACEPTADO_PROVEEDOR)
+                $this->completeNotificationLease(self::ESTADO_PARCIAL, [], $ultimoError, true);
+
+                return;
             }
 
-            // Si ninguno fue aceptado y hay fallos
-            $this->saveInterimLeaseState(self::ESTADO_FALLIDO, $ultimoError);
-            throw new RuntimeException("Fallo en todos los canales para {$this->alumno->matricula}: {$ultimoError}");
+            // 3. Ningún canal fue aceptado
+            if ($inciertos === $canalesConfigurados) {
+                // Todos los canales configurados quedaron en INCIERTO
+                $this->completeNotificationLease(self::ESTADO_INCIERTO, [], $ultimoError, false);
+
+                return;
+            }
+
+            if ($fallidos > 0) {
+                $estadoInterim = ($inciertos > 0) ? self::ESTADO_PARCIAL : self::ESTADO_FALLIDO;
+                $this->saveInterimLeaseState($estadoInterim, $ultimoError);
+                throw new RuntimeException("Fallo en todos los canales para {$this->alumno->matricula}: {$ultimoError}");
+            }
         } catch (\Throwable $e) {
             Log::error('Error en NotificarAsistenciaJob: '.$e->getMessage(), [
                 'matricula' => $this->alumno->matricula ?? 'N/A',
