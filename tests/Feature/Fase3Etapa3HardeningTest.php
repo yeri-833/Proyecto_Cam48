@@ -36,19 +36,19 @@ class Fase3Etapa3HardeningTest extends TestCase
     // 1. REGISTRO ADMINISTRATIVO SEGURO (MÓDULO 1)
     // ─────────────────────────────────────────────────────────────────
 
-    public function test_administrador_puede_registrar_docente_con_tipo_usuario(): void
+    public function test_director_puede_registrar_secretaria_con_tipo_usuario(): void
     {
         $admin = User::create([
             'nombre_completo' => 'Director Admin',
             'correo' => 'admin_reg@test.com',
             'password' => Hash::make('password123'),
-            'tipo_usuario' => 'Administrador',
+            'tipo_usuario' => 'Director',
         ]);
 
         $response = $this->actingAs($admin)->post('/register', [
             'name' => 'Profesor Nuevo',
             'email' => 'profe_nuevo@test.com',
-            'tipo_usuario' => 'Docente',
+            'tipo_usuario' => 'Secretaria',
             'password' => 'password123',
             'password_confirmation' => 'password123',
         ]);
@@ -56,14 +56,14 @@ class Fase3Etapa3HardeningTest extends TestCase
         $response->assertRedirect('/dashboard');
         $this->assertDatabaseHas('usuarios', [
             'correo' => 'profe_nuevo@test.com',
-            'tipo_usuario' => 'Docente',
+            'tipo_usuario' => 'Secretaria',
         ]);
 
         // La sesión del administrador permanece activa
         $this->assertAuthenticatedAs($admin);
     }
 
-    public function test_administrador_puede_registrar_operador_kiosco(): void
+    public function test_director_puede_registrar_operador_kiosco(): void
     {
         $admin = User::create([
             'nombre_completo' => 'Director Admin 2',
@@ -141,7 +141,7 @@ class Fase3Etapa3HardeningTest extends TestCase
             'nombre_completo' => 'Admin Validador',
             'correo' => 'admin_val@test.com',
             'password' => Hash::make('password123'),
-            'tipo_usuario' => 'Administrador',
+            'tipo_usuario' => 'Director',
         ]);
 
         // Rol no existente en la lista blanca
@@ -158,7 +158,7 @@ class Fase3Etapa3HardeningTest extends TestCase
         $resDuplicado = $this->actingAs($admin)->post('/register', [
             'name' => 'Usuario Duplicado',
             'email' => 'admin_val@test.com',
-            'tipo_usuario' => 'Docente',
+            'tipo_usuario' => 'Secretaria',
             'password' => 'password123',
             'password_confirmation' => 'password123',
         ]);
@@ -169,7 +169,7 @@ class Fase3Etapa3HardeningTest extends TestCase
     // 2. PRIVACIDAD DE EXPEDIENTES ESCOLARES (MÓDULO 2)
     // ─────────────────────────────────────────────────────────────────
 
-    public function test_docente_solo_ve_expedientes_y_alumnos_de_su_grupo_autorizado(): void
+    public function test_docente_retirado_no_ve_expedientes_aunque_este_vinculado_a_su_grupo(): void
     {
         $docente1A = User::create([
             'nombre_completo' => 'Docente Primero A',
@@ -204,7 +204,7 @@ class Fase3Etapa3HardeningTest extends TestCase
             'activo' => 1,
         ]);
 
-        $doc1A = ArchivoSistema::create([
+        ArchivoSistema::create([
             'matricula' => $alumno1A->matricula,
             'nombre_original' => 'evaluacion_1a.pdf',
             'nombre_servidor' => 'serv_1a.pdf',
@@ -213,7 +213,7 @@ class Fase3Etapa3HardeningTest extends TestCase
             'fecha_subida' => now(),
         ]);
 
-        $doc2B = ArchivoSistema::create([
+        ArchivoSistema::create([
             'matricula' => $alumno2B->matricula,
             'nombre_original' => 'diagnostico_2b.pdf',
             'nombre_servidor' => 'serv_2b.pdf',
@@ -222,29 +222,15 @@ class Fase3Etapa3HardeningTest extends TestCase
             'fecha_subida' => now(),
         ]);
 
-        // Docente 1A consulta el índice
         $response = $this->actingAs($docente1A)->get('/expedientes');
-        $response->assertOk();
+        $response->assertForbidden();
+        $response->assertDontSee('ALUM_1A_OK');
+        $response->assertDontSee('ALUM_2B_AJENO');
 
-        // Verificar datos expuestos en Inertia props
-        $archivosPaginados = $response->viewData('page')['props']['archivos']['data'];
-        $alumnosDisponibles = $response->viewData('page')['props']['alumnos'];
-
-        $matriculasArchivos = array_column($archivosPaginados, 'matricula');
-        $matriculasAlumnos = array_column($alumnosDisponibles, 'matricula');
-
-        // Solo debe ver el archivo y alumno de 1 A
-        $this->assertContains('ALUM_1A_OK', $matriculasArchivos);
-        $this->assertNotContains('ALUM_2B_AJENO', $matriculasArchivos);
-
-        $this->assertContains('ALUM_1A_OK', $matriculasAlumnos);
-        $this->assertNotContains('ALUM_2B_AJENO', $matriculasAlumnos);
-
-        // Búsqueda de alumno ajeno debe retornar 0 resultados
         $resBusquedaAjena = $this->actingAs($docente1A)->get('/expedientes?busqueda=CARLOS');
-        $resBusquedaAjena->assertOk();
-        $archivosFiltrados = $resBusquedaAjena->viewData('page')['props']['archivos']['data'];
-        $this->assertEmpty($archivosFiltrados);
+        $resBusquedaAjena->assertForbidden();
+        $resBusquedaAjena->assertDontSee('ALUM_1A_OK');
+        $resBusquedaAjena->assertDontSee('ALUM_2B_AJENO');
     }
 
     public function test_docente_no_puede_subir_documentos_a_alumnos_ajenos(): void
@@ -444,7 +430,7 @@ class Fase3Etapa3HardeningTest extends TestCase
             'nombre_completo' => 'Admin Invitaciones',
             'correo' => 'admin_inv@test.com',
             'password' => Hash::make('password123'),
-            'tipo_usuario' => 'Administrador',
+            'tipo_usuario' => 'Director',
         ]);
 
         $tutor = Tutor::create([
@@ -515,7 +501,7 @@ class Fase3Etapa3HardeningTest extends TestCase
         $this->assertTrue($resTgReal['success']);
     }
 
-    public function test_administrador_ve_documentos_y_alumnos_de_todos_los_grupos(): void
+    public function test_director_ve_documentos_y_alumnos_de_todos_los_grupos(): void
     {
         $admin = User::create([
             'nombre_completo' => 'Director General',

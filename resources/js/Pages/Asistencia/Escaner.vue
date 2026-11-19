@@ -149,7 +149,7 @@ const enviarDatosServidor = async (codigo) => {
 
         if (result.status === 'success') {
             reproducirSonido('ok');
-            aplicarEstilosVisuales('exito', result.persona, result.msg);
+            aplicarEstilosVisuales('exito', result.persona || 'Asistencia', result.msg);
         } else if (result.status === 'warning') {
             reproducirSonido('error');
             aplicarEstilosVisuales('alerta', result.persona || 'Aviso Escolar', result.msg);
@@ -274,7 +274,11 @@ const intentarSalir = async () => {
                     document.exitFullscreen();
                 }
                 detenerCamara();
-                router.visit(route('dashboard'));
+                if (response.data.destination === 'logout') {
+                    router.post(route('logout'));
+                } else {
+                    router.visit(route('dashboard'));
+                }
             } else {
                 Swal.fire({
                     icon: 'error',

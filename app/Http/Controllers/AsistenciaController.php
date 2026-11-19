@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\NotificarAsistenciaJob;
 use App\Models\Alumno;
+use App\Models\Evento;
 use App\Models\Personal;
 use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class AsistenciaController extends Controller
@@ -63,6 +65,22 @@ class AsistenciaController extends Controller
     public function procesarQr(Request $request)
     {
         Gate::authorize('asistencia.escanear');
+
+        $validated = $request->validate([
+            'evento_id' => [
+                'bail', 'nullable',
+                static function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (! is_int($value) && ! is_string($value)) {
+                        $fail('El identificador del evento no es válido.');
+                    }
+                },
+                'integer', 'min:1', 'max:'.PHP_INT_MAX, 'exists:eventos,id',
+            ],
+        ]);
+        $eventoId = isset($validated['evento_id']) ? (int) $validated['evento_id'] : null;
+        if ($eventoId !== null && ! self::tieneColumnaAsistencia('evento_id')) {
+            throw ValidationException::withMessages(['evento_id' => 'El registro por evento no está disponible en este esquema.']);
+        }
 
         $qrData = $request->input('qr_data');
 
@@ -165,8 +183,7 @@ class AsistenciaController extends Controller
             }
 
             // Restricción estricta contra registros duplicados en el mismo evento
-            if ($request->filled('evento_id') && self::tieneColumnaAsistencia('evento_id')) {
-                $eventoId = (int) $request->input('evento_id');
+            if ($eventoId !== null) {
                 $yaAsistioEvento = $personaModel->asistencias()
                     ->where('evento_id', $eventoId)
                     ->exists();
@@ -218,37 +235,43 @@ class AsistenciaController extends Controller
             if (self::tieneColumnaAsistencia('rol')) {
                 $asistenciaData['rol'] = $rol;
             }
-            if ($request->filled('evento_id') && self::tieneColumnaAsistencia('evento_id')) {
-                $asistenciaData['evento_id'] = (int) $request->input('evento_id');
+            if ($eventoId !== null) {
+                $asistenciaData['evento_id'] = $eventoId;
             }
 
-            $asistenciaCreada = $personaModel->asistencias()->create($asistenciaData);
-
-            // Actualizar convocatoria explícita si la tabla existe
-            if ($rol === 'Tutor' && isset($asistenciaData['evento_id']) && Schema::hasTable('evento_convocatorias')) {
-                $affected = DB::table('evento_convocatorias')
-                    ->where('evento_id', $asistenciaData['evento_id'])
-                    ->where('tutor_id', $personaModel->id)
-                    ->update([
-                        'asistio' => true,
-                        'fecha_asistencia' => Carbon::now(),
-                        'updated_at' => Carbon::now(),
-                    ]);
-
-                if ($affected === 0) {
-                    // Tutor asistente no convocado previamente (walk-in): registrar para cálculo exacto
-                    DB::table('evento_convocatorias')->insertOrIgnore([
-                        'evento_id' => $asistenciaData['evento_id'],
-                        'tutor_id' => $personaModel->id,
-                        'alumno_matricula' => $personaModel->matricula_alumno,
-                        'notificado' => false,
-                        'asistio' => true,
-                        'fecha_asistencia' => Carbon::now(),
-                        'created_at' => Carbon::now(),
-                        'updated_at' => Carbon::now(),
-                    ]);
+            DB::transaction(function () use ($personaModel, $asistenciaData, $rol, $eventoId): void {
+                if ($eventoId !== null && Evento::query()->whereKey($eventoId)->lockForUpdate()->first(['id']) === null) {
+                    throw ValidationException::withMessages(['evento_id' => 'El evento seleccionado ya no está disponible.']);
                 }
-            }
+
+                $personaModel->asistencias()->create($asistenciaData);
+
+                // Actualizar convocatoria explícita si la tabla existe
+                if ($rol === 'Tutor' && isset($asistenciaData['evento_id']) && Schema::hasTable('evento_convocatorias')) {
+                    $affected = DB::table('evento_convocatorias')
+                        ->where('evento_id', $asistenciaData['evento_id'])
+                        ->where('tutor_id', $personaModel->id)
+                        ->update([
+                            'asistio' => true,
+                            'fecha_asistencia' => Carbon::now(),
+                            'updated_at' => Carbon::now(),
+                        ]);
+
+                    if ($affected === 0) {
+                        // Tutor asistente no convocado previamente (walk-in): registrar para cálculo exacto
+                        DB::table('evento_convocatorias')->insertOrIgnore([
+                            'evento_id' => $asistenciaData['evento_id'],
+                            'tutor_id' => $personaModel->id,
+                            'alumno_matricula' => $personaModel->matricula_alumno,
+                            'notificado' => false,
+                            'asistio' => true,
+                            'fecha_asistencia' => Carbon::now(),
+                            'created_at' => Carbon::now(),
+                            'updated_at' => Carbon::now(),
+                        ]);
+                    }
+                }
+            });
 
             // =========== ALERTAS AUTOMÁTICAS (WHATSAPP + TELEGRAM) ===========
             if ($rol === 'Alumno' && isset($alumno) && $alumno->tutor) {
@@ -286,6 +309,8 @@ class AsistenciaController extends Controller
 
             return response()->json($responsePayload);
 
+        } catch (ValidationException $exception) {
+            throw $exception;
         } catch (\Exception $e) {
             Log::error('Error en procesarQr: '.$e->getMessage(), ['id' => (string) $idPersona]);
 
@@ -317,6 +342,7 @@ class AsistenciaController extends Controller
         if ($user && Hash::check($password, $user->password)) {
             return response()->json([
                 'status' => 'success',
+                'destination' => $user->isOperador() ? 'logout' : 'dashboard',
             ]);
         }
 

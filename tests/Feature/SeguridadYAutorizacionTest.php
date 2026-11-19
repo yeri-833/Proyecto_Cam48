@@ -57,9 +57,9 @@ class SeguridadYAutorizacionTest extends TestCase
     }
 
     /**
-     * Un administrador sí debe tener autorización para eliminar registros.
+     * El alias retirado admin no debe permitir eliminar registros.
      */
-    public function test_administrador_puede_eliminar_registros(): void
+    public function test_admin_retirado_no_puede_eliminar_registros(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
@@ -71,8 +71,8 @@ class SeguridadYAutorizacionTest extends TestCase
         ]);
 
         $responseHistorial = $this->actingAs($admin)->delete("/historial/{$asistencia->id}");
-        $responseHistorial->assertStatus(302); // Redirect back with success message
-        $this->assertDatabaseMissing('registros_asistencia', ['id' => $asistencia->id]);
+        $responseHistorial->assertForbidden();
+        $this->assertDatabaseHas('registros_asistencia', ['id' => $asistencia->id]);
     }
 
     /**
@@ -113,7 +113,7 @@ class SeguridadYAutorizacionTest extends TestCase
      */
     public function test_actualizacion_alumno_preserva_todos_los_campos(): void
     {
-        $admin = User::first() ?? User::factory()->create(['role' => 'admin']);
+        $secretaria = User::factory()->create(['tipo_usuario' => 'Secretaria']);
 
         $alumno = Alumno::firstOrCreate(
             ['matricula' => 'ALUM_CAMPOS_01'],
@@ -125,7 +125,7 @@ class SeguridadYAutorizacionTest extends TestCase
             ]
         );
 
-        $response = $this->actingAs($admin)->put("/alumnos/{$alumno->matricula}", [
+        $response = $this->actingAs($secretaria)->put("/alumnos/{$alumno->matricula}", [
             'nombre' => 'ROBERTO CARLOS',
             'apellido' => 'GOMEZ BOLAÑOS',
             'sexo' => 'M',

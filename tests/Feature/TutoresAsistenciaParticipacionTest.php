@@ -2,12 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\NotificarAsistenciaJob;
+use App\Jobs\NotificarEventoTutorJob;
 use App\Models\Alumno;
 use App\Models\Evento;
 use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
 use App\Models\User;
+use App\Services\FamiliaService;
+use App\Services\TelegramService;
+use App\Services\WhatsAppService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -29,7 +35,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_historial_asistencia_muestra_alumno_relacionado_para_tutores(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
         $alumno = Alumno::create([
             'matricula' => 'FICT_ALUM_TUT_01',
             'nombre' => 'Pedrito',
@@ -67,7 +73,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_exportacion_csv_incluye_columna_de_alumno_relacionado(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
         $alumno = Alumno::create([
             'matricula' => 'FICT_ALUM_CSV',
             'nombre' => 'Ana',
@@ -103,7 +109,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_estadisticas_calcula_participacion_de_tutores_y_eventos(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
         $alumno = Alumno::create([
             'matricula' => 'FICT_ALUM_ESTAD',
             'nombre' => 'Sofía',
@@ -147,7 +153,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_asistencia_procesar_qr_admite_evento_id(): void
     {
-        $operador = User::factory()->create(['role' => 'kiosco']);
+        $operador = User::factory()->create(['role' => 'Operador']);
         $tutor = Tutor::create([
             't1_nombre' => 'TUTOR QR EVENTO',
             't1_telefono' => '0000000000',
@@ -181,7 +187,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_familias_con_multiples_hijos_agrupan_alumnos_y_calculan_denominador_real_de_convocatorias(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
 
         // Familia 1 con 2 hermanos inscritos
         $h1 = Alumno::create([
@@ -266,7 +272,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_distincion_estricta_familias_tutores_homonimos_telefonos_compartidos_y_deduplicacion_eventos(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
 
         // 1. Homónimos: Dos tutoras distintas llamadas "MARIA LOPEZ" con teléfonos y alumnos distintos
         $a1 = Alumno::create(['matricula' => 'ALUM_HOMO_1', 'nombre' => 'Luis', 'apellido' => 'García', 'activo' => 1]);
@@ -372,7 +378,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         ]);
 
         // Vincular explícitamente en tabla alumno_tutor
-        \Illuminate\Support\Facades\DB::table('alumno_tutor')->insert([
+        DB::table('alumno_tutor')->insert([
             ['tutor_id' => $tutor->id, 'alumno_matricula' => $hijo1->matricula, 'parentesco' => 'Padre', 'es_tutor_principal' => true, 'created_at' => now(), 'updated_at' => now()],
             ['tutor_id' => $tutor->id, 'alumno_matricula' => $hijo2->matricula, 'parentesco' => 'Padre', 'es_tutor_principal' => true, 'created_at' => now(), 'updated_at' => now()],
         ]);
@@ -389,7 +395,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_evento_convocatorias_explicitas_calcula_denominador_real_sin_contar_toda_la_escuela(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
 
         // Crear 10 alumnos activos en la escuela
         for ($i = 1; $i <= 10; $i++) {
@@ -413,7 +419,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
         // Convocar explícitamente solo a los 3 tutores (no a los 10 de la escuela)
         foreach ($tutores as $t) {
-            \Illuminate\Support\Facades\DB::table('evento_convocatorias')->insert([
+            DB::table('evento_convocatorias')->insert([
                 'evento_id' => $evento->id,
                 'tutor_id' => $t->id,
                 'alumno_matricula' => $t->matricula_alumno,
@@ -454,7 +460,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_escaner_rechaza_registro_duplicado_mismo_tutor_y_evento(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Director']);
 
         $alumno = Alumno::create(['matricula' => 'MAT_SCAN_01', 'nombre' => 'Hugo', 'apellido' => 'Díaz', 'activo' => 1]);
         $tutor = Tutor::create([
@@ -468,7 +474,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
             'fecha_hora' => Carbon::today()->setTime(8, 0),
         ]);
 
-        \Illuminate\Support\Facades\DB::table('evento_convocatorias')->insert([
+        DB::table('evento_convocatorias')->insert([
             'evento_id' => $evento->id,
             'tutor_id' => $tutor->id,
             'alumno_matricula' => $alumno->matricula,
@@ -494,7 +500,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         $resp1->assertOk();
         $resp1->assertJson(['status' => 'success']);
 
-        $convocatoria = \Illuminate\Support\Facades\DB::table('evento_convocatorias')
+        $convocatoria = DB::table('evento_convocatorias')
             ->where('evento_id', $evento->id)
             ->where('tutor_id', $tutor->id)
             ->first();
@@ -523,7 +529,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_familia_service_distingue_identidad_familiar_de_identidad_del_tutor(): void
     {
-        $familiaService = app(\App\Services\FamiliaService::class);
+        $familiaService = app(FamiliaService::class);
 
         // Alumnos hermanos
         $alumno1 = Alumno::create([
@@ -552,7 +558,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         ]);
 
         // Vinculación en alumno_tutor
-        \Illuminate\Support\Facades\DB::table('alumno_tutor')->insert([
+        DB::table('alumno_tutor')->insert([
             ['tutor_id' => $mama->id, 'alumno_matricula' => $alumno1->matricula, 'parentesco' => 'MADRE', 'es_tutor_principal' => true, 'created_at' => now(), 'updated_at' => now()],
             ['tutor_id' => $mama->id, 'alumno_matricula' => $alumno2->matricula, 'parentesco' => 'MADRE', 'es_tutor_principal' => false, 'created_at' => now(), 'updated_at' => now()],
             ['tutor_id' => $papa->id, 'alumno_matricula' => $alumno1->matricula, 'parentesco' => 'PADRE', 'es_tutor_principal' => false, 'created_at' => now(), 'updated_at' => now()],
@@ -578,7 +584,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
             't1_nombre' => 'MARIA LOPEZ', // Mismo nombre
             't1_telefono' => '9219998877',
         ]);
-        \Illuminate\Support\Facades\DB::table('alumno_tutor')->insert([
+        DB::table('alumno_tutor')->insert([
             'tutor_id' => $tutorHomonimo->id,
             'alumno_matricula' => $alumnoOtraFamilia->matricula,
             'parentesco' => 'MADRE',
@@ -602,7 +608,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
             't1_nombre' => 'ROSA CASANOVA',
             't1_telefono' => '9211112233', // Mismo teléfono de la caseta que $mama
         ]);
-        \Illuminate\Support\Facades\DB::table('alumno_tutor')->insert([
+        DB::table('alumno_tutor')->insert([
             'tutor_id' => $tutorCaseta->id,
             'alumno_matricula' => $alumnoCompartido->matricula,
             'parentesco' => 'MADRE',
@@ -621,7 +627,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_administracion_convocatorias_permite_convocar_por_tutor_directo_y_grado_grupo(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
 
         $evento = Evento::create([
             'nombre_evento' => 'Junta Informativa 1A',
@@ -643,7 +649,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
             't1_telefono' => '9211234567',
         ]);
 
-        \Illuminate\Support\Facades\DB::table('alumno_tutor')->insert([
+        DB::table('alumno_tutor')->insert([
             'tutor_id' => $tutor1A->id,
             'alumno_matricula' => $alumno1A->matricula,
             'es_tutor_principal' => true,
@@ -676,21 +682,55 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         ]);
         $this->assertCount(1, $responseList->json('convocatorias'));
 
-        // Desconvocar
+        $tutorDirecto = Tutor::create([
+            't1_nombre' => 'TUTOR DIRECTO SINTETICO',
+            't1_telefono' => '0000000000',
+        ]);
+        $this->post(route('eventos.convocar', $evento->id), [
+            'tutores_ids' => [$tutorDirecto->id],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('evento_convocatorias', [
+            'evento_id' => $evento->id,
+            'tutor_id' => $tutorDirecto->id,
+            'notificado' => false,
+            'asistio' => false,
+        ]);
+        $this->getJson(route('eventos.convocatorias', $evento->id))
+            ->assertOk()->assertJsonCount(2, 'convocatorias');
+
+        $convocatoriasAntes = DB::table('evento_convocatorias')
+            ->orderBy('id')->get()->map(static fn (object $row): array => (array) $row)->all();
+        $asistenciasAntes = DB::table('registros_asistencia')
+            ->orderBy('id')->get()->map(static fn (object $row): array => (array) $row)->all();
+
         $responseDesconvocar = $this->actingAs($admin)->delete(route('eventos.desconvocar', [
             'id' => $evento->id,
             'tutorId' => $tutor1A->id,
         ]));
-        $responseDesconvocar->assertRedirect();
-        $this->assertDatabaseMissing('evento_convocatorias', [
+        $responseDesconvocar->assertForbidden();
+        $this->assertSame($convocatoriasAntes, DB::table('evento_convocatorias')
+            ->orderBy('id')->get()->map(static fn (object $row): array => (array) $row)->all());
+        $this->assertSame($asistenciasAntes, DB::table('registros_asistencia')
+            ->orderBy('id')->get()->map(static fn (object $row): array => (array) $row)->all());
+
+        $director = User::factory()->create(['role' => 'Director']);
+        $this->actingAs($director)->delete(route('eventos.desconvocar', [
+            'id' => $evento->id,
+            'tutorId' => $tutor1A->id,
+        ]))->assertStatus(409);
+        $this->assertDatabaseHas('evento_convocatorias', [
             'evento_id' => $evento->id,
             'tutor_id' => $tutor1A->id,
         ]);
+        $this->assertSame($convocatoriasAntes, DB::table('evento_convocatorias')
+            ->orderBy('id')->get()->map(static fn (object $row): array => (array) $row)->all());
+        $this->assertSame($asistenciasAntes, DB::table('registros_asistencia')
+            ->orderBy('id')->get()->map(static fn (object $row): array => (array) $row)->all());
     }
 
     public function test_asistencia_manual_en_evento_confirma_asistencia_y_actualiza_convocatoria(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
 
         $evento = Evento::create([
             'nombre_evento' => 'Junta General Anual',
@@ -703,7 +743,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
             't1_telefono' => '9219876543',
         ]);
 
-        \Illuminate\Support\Facades\DB::table('evento_convocatorias')->insert([
+        DB::table('evento_convocatorias')->insert([
             'evento_id' => $evento->id,
             'tutor_id' => $tutor->id,
             'alumno_matricula' => 'FICT_MANUAL_01',
@@ -730,7 +770,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         ]);
 
         // Verificar que evento_convocatorias se actualizó a asistio = true
-        $convocatoria = \Illuminate\Support\Facades\DB::table('evento_convocatorias')
+        $convocatoria = DB::table('evento_convocatorias')
             ->where('evento_id', $evento->id)
             ->where('tutor_id', $tutor->id)
             ->first();
@@ -749,7 +789,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_asistencia_walk_in_de_tutor_no_convocado_se_registra_en_evento_convocatorias(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Director']);
 
         $evento = Evento::create([
             'nombre_evento' => 'Junta Especial de Padres',
@@ -793,7 +833,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
     public function test_tutor_controller_sincroniza_alumno_tutor_y_permite_vincular_desvincular(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
 
         $alumno1 = Alumno::create([
             'matricula' => 'ALUM_SYNC_01',
@@ -875,10 +915,10 @@ class TutoresAsistenciaParticipacionTest extends TestCase
             't1_email' => 'lucia.santos@example.test',
         ]);
 
-        $wsMock = \Mockery::mock(\App\Services\WhatsAppService::class);
+        $wsMock = \Mockery::mock(WhatsAppService::class);
         $wsMock->shouldReceive('enviarMensajeDirecto')->once()->andReturn(true);
 
-        $tgMock = \Mockery::mock(\App\Services\TelegramService::class);
+        $tgMock = \Mockery::mock(TelegramService::class);
 
         $evento = Evento::create([
             'nombre_evento' => 'Junta General 2026',
@@ -886,7 +926,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
             'ubicacion' => 'Auditorio CAM 48',
         ]);
 
-        $job = new \App\Jobs\NotificarEventoTutorJob(
+        $job = new NotificarEventoTutorJob(
             $tutor,
             'Recordatorio de Junta',
             'Junta General 2026',
@@ -909,7 +949,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
         // Solo debe haber un registro en la tabla para esta clave
         $idempotencyKey = hash('sha256', "evento:id:{$evento->id}:tutor:{$tutor->id}:fecha:10/11/2026 10:00 AM");
-        $count = \Illuminate\Support\Facades\DB::table('notificaciones_procesadas')
+        $count = DB::table('notificaciones_procesadas')
             ->where('idempotency_key', $idempotencyKey)
             ->count();
         $this->assertSame(1, $count);
@@ -932,12 +972,12 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
         $alumno->setRelation('tutor', $tutor);
 
-        $wsMock = \Mockery::mock(\App\Services\WhatsAppService::class);
+        $wsMock = \Mockery::mock(WhatsAppService::class);
         $wsMock->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
 
-        $tgMock = \Mockery::mock(\App\Services\TelegramService::class);
+        $tgMock = \Mockery::mock(TelegramService::class);
 
-        $job = new \App\Jobs\NotificarAsistenciaJob(
+        $job = new NotificarAsistenciaJob(
             $alumno,
             'ENTRADA',
             '08:15 AM',
@@ -958,7 +998,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
 
         $fechaHoy = now()->toDateString();
         $idempotencyKey = hash('sha256', "asistencia:alumno:{$alumno->matricula}:pase:ENTRADA:fecha:{$fechaHoy}:hora:08:15 AM");
-        $count = \Illuminate\Support\Facades\DB::table('notificaciones_procesadas')
+        $count = DB::table('notificaciones_procesadas')
             ->where('idempotency_key', $idempotencyKey)
             ->count();
         $this->assertSame(1, $count);

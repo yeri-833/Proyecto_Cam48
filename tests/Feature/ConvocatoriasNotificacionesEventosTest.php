@@ -17,8 +17,11 @@ use Tests\TestCase;
 class ConvocatoriasNotificacionesEventosTest extends TestCase
 {
     private Tutor $tutor;
+
     private Evento $evento1;
+
     private Evento $evento2;
+
     private Evento $evento3;
 
     protected function setUp(): void
@@ -297,27 +300,54 @@ class ConvocatoriasNotificacionesEventosTest extends TestCase
 
     public function test_desconvocatoria_y_registro_manual_independiente(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Director']);
 
         // Registrar convocatoria mediante la ruta autorizada
         $this->actingAs($admin)->post(route('eventos.convocar', $this->evento1->id), [
             'tutores_ids' => [$this->tutor->id],
-        ]);
+        ])->assertRedirect()->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('evento_convocatorias', [
             'evento_id' => $this->evento1->id,
             'tutor_id' => $this->tutor->id,
         ]);
 
-        // Desconvocar mediante la ruta autorizada
+        $this->post(route('eventos.asistenciaManual', [
+            'id' => $this->evento2->id,
+            'tutorId' => $this->tutor->id,
+        ]))->assertRedirect()->assertSessionHasNoErrors();
+
+        $convocatoriasAntes = DB::table('evento_convocatorias')->orderBy('id')->get()
+            ->map(static fn (object $row): array => (array) $row)->all();
+        $asistenciasAntes = DB::table('registros_asistencia')->orderBy('id')->get()
+            ->map(static fn (object $row): array => (array) $row)->all();
+        $this->assertCount(2, $convocatoriasAntes);
+        $this->assertCount(1, $asistenciasAntes);
+
         $this->actingAs($admin)->delete(route('eventos.desconvocar', [
             'id' => $this->evento1->id,
             'tutorId' => $this->tutor->id,
-        ]));
+        ]))->assertStatus(409);
 
-        $this->assertDatabaseMissing('evento_convocatorias', [
+        $this->assertDatabaseHas('evento_convocatorias', [
             'evento_id' => $this->evento1->id,
             'tutor_id' => $this->tutor->id,
+            'asistio' => false,
+        ]);
+        $this->assertSame($convocatoriasAntes, DB::table('evento_convocatorias')->orderBy('id')->get()
+            ->map(static fn (object $row): array => (array) $row)->all());
+        $this->assertSame($asistenciasAntes, DB::table('registros_asistencia')->orderBy('id')->get()
+            ->map(static fn (object $row): array => (array) $row)->all());
+        $this->assertDatabaseHas('registros_asistencia', [
+            'evento_id' => $this->evento2->id,
+            'asistible_type' => Tutor::class,
+            'asistible_id' => (string) $this->tutor->id,
+            'modo_registro' => 'MANUAL',
+        ]);
+        $this->assertDatabaseMissing('registros_asistencia', [
+            'evento_id' => $this->evento1->id,
+            'asistible_type' => Tutor::class,
+            'asistible_id' => (string) $this->tutor->id,
         ]);
     }
 }

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Alumno;
 use App\Models\Personal;
-use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -240,14 +239,12 @@ class HistorialController extends Controller
     }
 
     /**
-     * Elimina un registro de asistencia por error.
+     * Bloquea eliminaciones hasta disponer de auditoría persistente.
      */
     public function destroy($id)
     {
         Gate::authorize('historial.eliminar');
 
-        RegistroAsistencia::where('id', $id)->delete();
-
-        return redirect()->back()->with('success', 'Registro eliminado correctamente.');
+        abort(409, 'Eliminación de asistencia pendiente de habilitar un historial persistente de auditoría.');
     }
 }

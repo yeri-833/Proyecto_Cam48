@@ -35,7 +35,7 @@ class Fase23VerificacionFuncionalTest extends TestCase
 
     public function test_login_redirecciona_correctamente_segun_el_rol(): void
     {
-        // A. Administrador -> Redirige a /dashboard
+        // Los perfiles retirados no pueden iniciar sesión ni acceder al dashboard.
         $admin = User::create([
             'nombre_completo' => 'Admin Test',
             'correo' => 'admin_login@test.com',
@@ -47,8 +47,9 @@ class Fase23VerificacionFuncionalTest extends TestCase
             'email' => 'admin_login@test.com',
             'password' => 'password123',
         ]);
-        $resAdmin->assertRedirect('/dashboard');
-        $this->actingAs($admin)->get('/dashboard')->assertOk();
+        $resAdmin->assertForbidden();
+        $this->assertGuest();
+        $this->actingAs($admin)->get('/dashboard')->assertForbidden();
         $this->post('/logout');
 
         // B. Director -> Redirige a /dashboard
@@ -67,7 +68,6 @@ class Fase23VerificacionFuncionalTest extends TestCase
         $this->actingAs($director)->get('/dashboard')->assertOk();
         $this->post('/logout');
 
-        // C. Docente -> Redirige a /dashboard
         $docente = User::create([
             'nombre_completo' => 'Docente Test',
             'correo' => 'docente_login@test.com',
@@ -79,8 +79,17 @@ class Fase23VerificacionFuncionalTest extends TestCase
             'email' => 'docente_login@test.com',
             'password' => 'password123',
         ]);
-        $resDoc->assertRedirect('/dashboard');
-        $this->actingAs($docente)->get('/dashboard')->assertOk();
+        $resDoc->assertForbidden();
+        $this->assertGuest();
+        $this->actingAs($docente)->get('/dashboard')->assertForbidden();
+        $this->post('/logout');
+
+        $secretaria = User::factory()->create(['tipo_usuario' => 'Secretaria']);
+        $this->post('/login', [
+            'email' => $secretaria->correo,
+            'password' => 'password',
+        ])->assertRedirect('/dashboard');
+        $this->actingAs($secretaria)->get('/dashboard')->assertOk();
         $this->post('/logout');
 
         // D. OPERADOR DE KIOSCO -> REDIRIGE DIRECTAMENTE A /escaner (SIN 403 EN DASHBOARD)
@@ -162,12 +171,12 @@ class Fase23VerificacionFuncionalTest extends TestCase
         ]);
         $resDoc->assertStatus(403);
 
-        // 3. Administrador registra usuario exitosamente
+        // Director registra un perfil vigente y conserva su sesión.
         $admin = User::create([
             'nombre_completo' => 'Admin Registrador',
             'correo' => 'admin_reg@test.com',
             'password' => Hash::make('password'),
-            'tipo_usuario' => 'Administrador',
+            'tipo_usuario' => 'Director',
         ]);
 
         $nuevoCorreo = 'nuevo_profesor_'.time().'@test.com';
@@ -176,7 +185,7 @@ class Fase23VerificacionFuncionalTest extends TestCase
             'email' => $nuevoCorreo,
             'password' => 'Password123!',
             'password_confirmation' => 'Password123!',
-            'tipo_usuario' => 'Docente',
+            'tipo_usuario' => 'Secretaria',
         ]);
         $resAdmin->assertRedirect(route('dashboard'));
 
@@ -185,7 +194,7 @@ class Fase23VerificacionFuncionalTest extends TestCase
         $this->assertNotNull($creado);
         $this->assertEquals('Profesor Nuevo', $creado->nombre_completo);
         $this->assertEquals($nuevoCorreo, $creado->correo);
-        $this->assertEquals('Docente', $creado->tipo_usuario);
+        $this->assertEquals('Secretaria', $creado->tipo_usuario);
 
         // Comprobar que la sesión del administrador PERMANECE ACTIVA (no se sustituyó por el nuevo usuario)
         $this->assertEquals($admin->id, auth()->user()->id);
@@ -249,7 +258,7 @@ class Fase23VerificacionFuncionalTest extends TestCase
         $resInvalido = $this->postJson('/escaner/procesar', ['qr_data' => $qrInvalido]);
         $resInvalido->assertJson([
             'status' => 'error',
-            'msg' => 'Código QR inválido o falsificado (Firma incorrecta)',
+            'msg' => 'Registro no realizado. Revise el código o solicite apoyo.',
         ]);
 
         // B. Alumno INACTIVO o dado de baja
@@ -262,7 +271,7 @@ class Fase23VerificacionFuncionalTest extends TestCase
         $resInactivo = $this->postJson('/escaner/procesar', ['qr_data' => $qrInactivo]);
         $resInactivo->assertJson([
             'status' => 'error',
-            'msg' => 'El alumno está inactivo o de baja',
+            'msg' => 'Registro no realizado. Revise el código o solicite apoyo.',
         ]);
 
         // C. Identificador inexistente
@@ -275,7 +284,7 @@ class Fase23VerificacionFuncionalTest extends TestCase
         $resInexistente = $this->postJson('/escaner/procesar', ['qr_data' => $qrInexistente]);
         $resInexistente->assertJson([
             'status' => 'error',
-            'msg' => 'El código no existe en el sistema',
+            'msg' => 'Registro no realizado. Revise el código o solicite apoyo.',
         ]);
 
         // D. QR con firma VÁLIDA -> Registro exitoso
@@ -288,7 +297,9 @@ class Fase23VerificacionFuncionalTest extends TestCase
         $resValido = $this->postJson('/escaner/procesar', ['qr_data' => $qrValido]);
         $resValido->assertJson([
             'status' => 'success',
+            'msg' => 'Asistencia registrada',
         ]);
+        $this->assertEqualsCanonicalizing(['status', 'msg', 'hora'], array_keys($resValido->json()));
         $this->assertDatabaseHas('registros_asistencia', [
             'asistible_type' => Alumno::class,
             'asistible_id' => $alumnoActivo->matricula,
@@ -298,8 +309,11 @@ class Fase23VerificacionFuncionalTest extends TestCase
         $resRepetido = $this->postJson('/escaner/procesar', ['qr_data' => $qrValido]);
         $resRepetido->assertJson([
             'status' => 'warning',
-            'msg' => 'Pase registrado recientemente.',
+            'msg' => 'Registro no realizado. Revise el código o solicite apoyo.',
         ]);
+        foreach ([$resInvalido, $resInactivo, $resInexistente, $resRepetido] as $respuesta) {
+            $this->assertEqualsCanonicalizing(['status', 'msg', 'hora'], array_keys($respuesta->json()));
+        }
 
         // F. Desbloqueo de Kiosco
         $resUnlockErr = $this->postJson('/escaner/desbloquear', ['password' => 'wrong_password']);
@@ -383,9 +397,9 @@ class Fase23VerificacionFuncionalTest extends TestCase
         $this->actingAs($admin)->get("/expedientes/{$archivo->id}/ver")->assertOk();
         $this->actingAs($admin)->get("/expedientes/{$archivo->id}/descargar")->assertOk();
 
-        // B. Docente del mismo grado y grupo (1 A) -> Acceso permitido
-        $this->actingAs($docente1A)->get("/expedientes/{$archivo->id}/ver")->assertOk();
-        $this->actingAs($docente1A)->get("/expedientes/{$archivo->id}/descargar")->assertOk();
+        // La vinculación con el grupo no habilita un perfil retirado.
+        $this->actingAs($docente1A)->get("/expedientes/{$archivo->id}/ver")->assertForbidden();
+        $this->actingAs($docente1A)->get("/expedientes/{$archivo->id}/descargar")->assertForbidden();
 
         // C. Docente de otro grado y grupo (2 B) -> 403 Forbidden
         $this->actingAs($docente2B)->get("/expedientes/{$archivo->id}/ver")->assertStatus(403);
@@ -414,61 +428,69 @@ class Fase23VerificacionFuncionalTest extends TestCase
             'nombre_completo' => 'Super Admin',
             'correo' => 'superadmin@test.com',
             'password' => Hash::make('pass'),
-            'tipo_usuario' => 'Administrador',
+            'tipo_usuario' => 'Director',
         ]);
 
-        $docente = User::create([
-            'nombre_completo' => 'Profesor Aula',
+        $secretaria = User::create([
+            'nombre_completo' => 'Secretaria Escolar',
             'correo' => 'profe@test.com',
             'password' => Hash::make('pass'),
-            'tipo_usuario' => 'Docente',
+            'tipo_usuario' => 'Secretaria',
         ]);
+        $docente = User::factory()->create(['tipo_usuario' => 'Docente']);
 
-        // A. Telegram Sync: Solo Administrador
-        $this->actingAs($docente)->get('/telegram/sync')->assertStatus(403);
+        // Telegram Sync requiere Director.
+        $this->actingAs($secretaria)->get('/telegram/sync')->assertStatus(403);
+        $this->actingAs($docente)->get('/telegram/sync')->assertForbidden();
         $this->actingAs($admin)->get('/telegram/sync')->assertOk();
 
         // B. Estadísticas y Credenciales
-        $this->actingAs($docente)->get('/estadisticas')->assertOk();
-        $this->actingAs($docente)->get('/credenciales')->assertOk();
+        $this->actingAs($secretaria)->get('/estadisticas')->assertOk();
+        $this->actingAs($secretaria)->get('/credenciales')->assertOk();
 
         // C. Historial
-        $this->actingAs($docente)->get('/historial')->assertOk();
-        $this->actingAs($docente)->get('/historial/exportar')->assertOk();
+        $this->actingAs($secretaria)->get('/historial')->assertOk();
+        $this->actingAs($secretaria)->get('/historial/exportar')->assertOk();
 
-        // D. Eliminación destructiva (Gate eliminar-registros): Docente 403, Admin Permitido
+        // Director conserva el permiso, pero la eliminación espera auditoría durable.
         $asistencia = RegistroAsistencia::create([
             'asistible_type' => Alumno::class,
             'asistible_id' => 'TEST_ASIST_DEL',
             'fecha' => Carbon::today()->toDateString(),
             'hora' => Carbon::now()->toTimeString(),
         ]);
-        $this->actingAs($docente)->delete("/historial/{$asistencia->id}")->assertStatus(403);
-        $this->actingAs($admin)->delete("/historial/{$asistencia->id}")->assertStatus(302);
-        $this->assertDatabaseMissing('registros_asistencia', ['id' => $asistencia->id]);
+        $antes = $asistencia->refresh()->getAttributes();
+        $this->actingAs($secretaria)->delete("/historial/{$asistencia->id}")->assertStatus(403);
+        $this->actingAs($docente)->delete("/historial/{$asistencia->id}")->assertForbidden();
+        $this->actingAs($admin)->delete("/historial/{$asistencia->id}")->assertStatus(409);
+        $this->assertDatabaseHas('registros_asistencia', ['id' => $asistencia->id]);
+        $this->assertSame($antes, $asistencia->refresh()->getAttributes());
 
-        // E. Gestión de Personal (Docente no puede crear, editar ni dar de baja a colegas)
+        // La gestión de personal requiere Director.
         $personal = Personal::create([
             'id' => 'P_TEST_PERM',
             'nombre_completo' => 'Personal Prueba',
             'activo' => 1,
         ]);
-        $this->actingAs($docente)->post('/personal', ['id' => 'P_NEW', 'nombre_completo' => 'X'])->assertStatus(403);
-        $this->actingAs($docente)->put("/personal/{$personal->id}", ['nombre_completo' => 'X'])->assertStatus(403);
-        $this->actingAs($docente)->delete("/personal/{$personal->id}")->assertStatus(403);
+        $this->actingAs($secretaria)->post('/personal', ['id' => 'P_NEW', 'nombre_completo' => 'X'])->assertStatus(403);
+        $this->actingAs($secretaria)->put("/personal/{$personal->id}", ['nombre_completo' => 'X'])->assertStatus(403);
+        $this->actingAs($secretaria)->delete("/personal/{$personal->id}")->assertStatus(403);
+        $this->actingAs($docente)->post('/personal', ['id' => 'P_NEW', 'nombre_completo' => 'X'])->assertForbidden();
+        $this->actingAs($docente)->put("/personal/{$personal->id}", ['nombre_completo' => 'X'])->assertForbidden();
+        $this->actingAs($docente)->delete("/personal/{$personal->id}")->assertForbidden();
 
-        // F. Directorio de Personal: Docente sí puede consultar
-        $this->actingAs($docente)->get('/personal')->assertOk();
+        $this->actingAs($secretaria)->get('/personal')->assertForbidden();
+        $this->actingAs($secretaria)->get('/expedientes')->assertForbidden();
+        $this->actingAs($secretaria)->get('/register')->assertForbidden();
 
-        // G. Directorio de Tutores: Docente sí puede consultar y crear
-        $this->actingAs($docente)->get('/tutores')->assertOk();
+        $this->actingAs($secretaria)->get('/tutores')->assertOk();
         $alumno = Alumno::create([
             'matricula' => 'ALUM_TUTOR_01',
             'nombre' => 'PEDRITO',
             'apellido' => 'LOPEZ',
             'activo' => 1,
         ]);
-        $resTutor = $this->actingAs($docente)->post('/tutores', [
+        $resTutor = $this->actingAs($secretaria)->post('/tutores', [
             'matricula_alumno' => $alumno->matricula,
             't1_nombre' => 'TUTOR DE PEDRITO',
             't1_telefono' => '5551234567',

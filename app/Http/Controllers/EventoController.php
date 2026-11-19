@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Alumno;
 use App\Models\Evento;
-use App\Models\EventoConvocatoria;
 use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
 use App\Services\TelegramService;
@@ -106,10 +105,7 @@ class EventoController extends Controller
     {
         Gate::authorize('eventos.eliminar');
 
-        $evento = Evento::findOrFail($id);
-        $evento->delete();
-
-        return redirect()->back()->with('success', 'Evento cancelado correctamente.');
+        abort(409, 'Cancelación pendiente de habilitar un historial persistente de auditoría.');
     }
 
     /**
@@ -117,7 +113,7 @@ class EventoController extends Controller
      */
     public function convocatorias($id)
     {
-        Gate::authorize('eventos.consultar');
+        Gate::authorize('convocatorias.consultar');
 
         $evento = Evento::findOrFail($id);
 
@@ -162,7 +158,7 @@ class EventoController extends Controller
      */
     public function convocar(Request $request, $id)
     {
-        Gate::authorize('eventos.crear');
+        Gate::authorize('convocatorias.gestionar');
 
         $evento = Evento::findOrFail($id);
 
@@ -256,16 +252,9 @@ class EventoController extends Controller
      */
     public function desconvocar(Request $request, $id, $tutorId)
     {
-        Gate::authorize('eventos.eliminar');
+        Gate::authorize('convocatorias.desconvocar');
 
-        if (Schema::hasTable('evento_convocatorias')) {
-            DB::table('evento_convocatorias')
-                ->where('evento_id', $id)
-                ->where('tutor_id', $tutorId)
-                ->delete();
-        }
-
-        return redirect()->back()->with('success', 'Convocatoria removida correctamente.');
+        abort(409, 'Desconvocatoria pendiente de habilitar un historial persistente de auditoría.');
     }
 
     /**
@@ -273,7 +262,7 @@ class EventoController extends Controller
      */
     public function marcarAsistenciaManual(Request $request, $id, $tutorId)
     {
-        Gate::authorize('eventos.crear');
+        Gate::authorize('asistencias.manual');
 
         $evento = Evento::findOrFail($id);
         $tutor = Tutor::findOrFail($tutorId);

@@ -33,7 +33,7 @@ class HistorialExportacionTest extends TestCase
      */
     public function test_exportacion_historial_descarga_csv_cabeceras_y_mime(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['tipo_usuario' => 'Director']);
         $fecha = Carbon::today()->toDateString();
 
         $response = $this->actingAs($admin)->get("/historial/exportar?fecha={$fecha}");
@@ -51,7 +51,7 @@ class HistorialExportacionTest extends TestCase
     #[DataProvider('proveedorFiltroRoles')]
     public function test_exportacion_filtrado_por_rol(string $rolFiltro, ?string $rolEsperadoEnCsv, bool $debeContener): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['tipo_usuario' => 'Director']);
         $fecha = Carbon::today()->toDateString();
 
         // Crear alumno, personal y tutor con asistencia hoy
@@ -103,7 +103,7 @@ class HistorialExportacionTest extends TestCase
     #[DataProvider('proveedorFiltroBusqueda')]
     public function test_exportacion_filtrado_por_busqueda(string $termino, string $coincidenciaEsperada, bool $debeAparecer): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['tipo_usuario' => 'Secretaria']);
         $fecha = Carbon::today()->toDateString();
 
         $alumno = Alumno::create(['matricula' => 'MAT_SRCH_99', 'nombre' => 'Sebastián', 'apellido' => 'Montiel', 'activo' => 1]);
@@ -144,7 +144,7 @@ class HistorialExportacionTest extends TestCase
     }
 
     /**
-     * Pruebas 16-20: Matriz de autorización y permisos RBAC (5 casos).
+     * Perfiles vigentes, aliases compatibles y perfiles retirados en la exportación.
      */
     #[DataProvider('proveedorRolesAutorizacion')]
     public function test_exportacion_matriz_autorizacion_rbac(?string $role, int $codigoHttpEsperado): void
@@ -153,7 +153,7 @@ class HistorialExportacionTest extends TestCase
         $url = "/historial/exportar?fecha={$fecha}";
 
         if ($role !== null) {
-            $user = User::factory()->create(['role' => $role]);
+            $user = User::factory()->create(['tipo_usuario' => $role]);
             $response = $this->actingAs($user)->get($url);
         } else {
             // Usuario no autenticado (invitado)
@@ -183,10 +183,17 @@ class HistorialExportacionTest extends TestCase
     public static function proveedorRolesAutorizacion(): array
     {
         return [
-            'administrador autorizado' => ['admin', 200],
-            'personal autorizado' => ['personal', 200],
+            'director autorizado' => ['Director', 200],
+            'directivo compatible autorizado' => ['Directivo', 200],
+            'secretaria autorizada' => ['Secretaria', 200],
+            'secretario compatible autorizado' => ['Secretario', 200],
+            'admin retirado denegado' => ['admin', 403],
+            'administrador retirado denegado' => ['Administrador', 403],
+            'personal retirado denegado' => ['personal', 403],
+            'docente retirado denegado' => ['Docente', 403],
             'alumno denegado' => ['alumno', 403],
             'kiosco denegado' => ['kiosco', 403],
+            'operador denegado' => ['Operador', 403],
             'invitado no autenticado redirige' => [null, 302],
         ];
     }
@@ -197,7 +204,7 @@ class HistorialExportacionTest extends TestCase
     #[DataProvider('proveedorSanitizacionCsv')]
     public function test_exportacion_sanitizacion_y_formato_csv(string $escenario, string $patronBuscado): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['tipo_usuario' => 'Director']);
         $fecha = Carbon::today()->toDateString();
 
         $alumno = Alumno::create(['matricula' => 'SAN_01', 'nombre' => 'José, María', 'apellido' => 'Pérez "El Rápido"', 'activo' => 1]);
@@ -234,7 +241,7 @@ class HistorialExportacionTest extends TestCase
     #[DataProvider('proveedorCasosLimite')]
     public function test_exportacion_casos_limite_y_rendimiento(string $caso, string $asercionClave): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['tipo_usuario' => 'Director']);
         $fecha = Carbon::today()->toDateString();
 
         // Crear lote de asistencias
