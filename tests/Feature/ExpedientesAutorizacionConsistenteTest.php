@@ -6,6 +6,7 @@ use App\Models\Alumno;
 use App\Models\ArchivoSistema;
 use App\Models\Personal;
 use App\Models\User;
+use App\Policies\ArchivoSistemaPolicy;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -23,7 +24,7 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
     }
 
     #[DataProvider('formatosDeAsignacion')]
-    public function test_listado_selector_y_policy_coinciden_para_formatos_escolares(string $asignacion, string $grado, string $grupo, bool $permitido): void
+    public function test_listado_selector_y_policy_deniegan_todos_los_formatos_docentes(string $asignacion, string $grado, string $grupo): void
     {
         $docente = User::factory()->create(['role' => 'Docente']);
         Personal::create([
@@ -51,39 +52,26 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
         ]);
         Storage::disk('local')->put('expedientes/ficticio.pdf', 'documento ficticio');
 
-        $response = $this->actingAs($docente)->get(route('expedientes.index'));
-        $response->assertOk();
-        $props = $response->viewData('page')['props'];
-        $this->assertCount($permitido ? 1 : 0, $props['archivos']['data']);
-        $this->assertCount($permitido ? 1 : 0, $props['alumnos']);
-        $this->get(route('expedientes.ver', $archivo->id))->assertStatus($permitido ? 200 : 403);
-        $this->get(route('expedientes.descargar', $archivo->id))->assertStatus($permitido ? 200 : 403);
-
-        $upload = $this->post(route('expedientes.store'), [
-            'matricula' => $alumno->matricula,
-            'archivo' => UploadedFile::fake()->create('ficticio_nuevo.pdf', 1, 'application/pdf'),
-        ]);
-        $upload->assertStatus($permitido ? 302 : 403);
-        $this->assertSame($permitido ? 2 : 1, ArchivoSistema::count());
+        $this->assertExpedientesDenegadosSinEfectos($docente, [$alumno], [$archivo]);
     }
 
-    /** @return array<string, array{string, string, string, bool}> */
+    /** @return array<string, array{string, string, string}> */
     public static function formatosDeAsignacion(): array
     {
         return [
-            'espacios y simbolo' => ['1° A', ' 1° ', ' a ', true],
-            'guion' => ['1 - A', ' 1 ', ' A ', true],
-            'compacto' => ['2b', '2°', 'b', true],
-            'grupo de varias letras' => ['10 AB', ' 10° ', 'aB', true],
-            'solo grupo' => ['A', '1', 'A', false],
-            'varias asignaciones' => ['1 A / 2 B', '1', 'A', false],
-            'sin asignacion' => ['', '1', 'A', false],
-            'otro grado' => ['1 A', '2', 'A', false],
-            'otro grupo' => ['1 A', '1', 'B', false],
-            'simbolos repetidos' => ['1 A', '1°°', 'A', false],
-            'grupo con acento no equivalente' => ['1 A', '1', 'Á', false],
-            'grupo con i sin punto no equivalente' => ['1 I', '1', 'ı', false],
-            'grupo con s larga no equivalente' => ['1 S', '1', 'ſ', false],
+            'espacios y simbolo' => ['1° A', ' 1° ', ' a '],
+            'guion' => ['1 - A', ' 1 ', ' A '],
+            'compacto' => ['2b', '2°', 'b'],
+            'grupo de varias letras' => ['10 AB', ' 10° ', 'aB'],
+            'solo grupo' => ['A', '1', 'A'],
+            'varias asignaciones' => ['1 A / 2 B', '1', 'A'],
+            'sin asignacion' => ['', '1', 'A'],
+            'otro grado' => ['1 A', '2', 'A'],
+            'otro grupo' => ['1 A', '1', 'B'],
+            'simbolos repetidos' => ['1 A', '1°°', 'A'],
+            'grupo con acento no equivalente' => ['1 A', '1', 'Á'],
+            'grupo con i sin punto no equivalente' => ['1 I', '1', 'ı'],
+            'grupo con s larga no equivalente' => ['1 S', '1', 'ſ'],
         ];
     }
 
@@ -114,20 +102,14 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
             'fecha_subida' => now(),
         ]);
 
-        $response = $this->actingAs($docente)->get(route('expedientes.index'));
-        $response->assertOk();
-        $this->assertEmpty($response->viewData('page')['props']['archivos']['data']);
-        $this->assertEmpty($response->viewData('page')['props']['alumnos']);
-        $this->get(route('expedientes.ver', $archivo->id))->assertForbidden();
+        $this->assertExpedientesDenegadosSinEfectos($docente, [$alumno], [$archivo]);
     }
 
     /**
      * Docente asignado a 1° A:
-     * - Alumno de 1° A: permitido en listado.
-     * - Alumno de 2° A: no permitido.
-     * - Alumno de 1° B: no permitido.
+     * No obtiene acceso a alumnos ni documentos de ningun grado o grupo.
      */
-    public function test_docente_1_a_solo_visualiza_alumnos_y_expedientes_de_su_grado_y_grupo(): void
+    public function test_docente_1_a_no_visualiza_alumnos_ni_expedientes_de_ningun_grupo(): void
     {
         $userDocente = User::create([
             'nombre_completo' => 'Docente 1A',
@@ -198,21 +180,11 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
             'fecha_subida' => now(),
         ]);
 
-        $response = $this->actingAs($userDocente)->get('/expedientes');
-        $response->assertOk();
-
-        $archivos = $response->viewData('page')['props']['archivos']['data'];
-        $matriculasEnListado = collect($archivos)->pluck('matricula')->all();
-
-        $this->assertContains('MAT_1A_OK', $matriculasEnListado);
-        $this->assertNotContains('MAT_2A_NO', $matriculasEnListado);
-        $this->assertNotContains('MAT_1B_NO', $matriculasEnListado);
-
-        // Selector de alumnos en modal también restringido
-        $alumnosDisponibles = collect($response->viewData('page')['props']['alumnos'])->pluck('matricula')->all();
-        $this->assertContains('MAT_1A_OK', $alumnosDisponibles);
-        $this->assertNotContains('MAT_2A_NO', $alumnosDisponibles);
-        $this->assertNotContains('MAT_1B_NO', $alumnosDisponibles);
+        $this->assertExpedientesDenegadosSinEfectos(
+            $userDocente,
+            [$alumno1A, $alumno2A, $alumno1B],
+            ArchivoSistema::all()->all(),
+        );
     }
 
     /**
@@ -253,12 +225,7 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
             'fecha_subida' => now(),
         ]);
 
-        $response = $this->actingAs($userDocente)->get('/expedientes');
-        $response->assertOk();
-
-        $archivos = $response->viewData('page')['props']['archivos']['data'];
-        $this->assertCount(1, $archivos);
-        $this->assertSame('MAT_1A_SIN_DEGREE', $archivos[0]['matricula']);
+        $this->assertExpedientesDenegadosSinEfectos($userDocente, [$alumno1A], ArchivoSistema::all()->all());
     }
 
     /**
@@ -299,15 +266,7 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
             'activo' => 1,
         ]);
 
-        $response = $this->actingAs($userAmbiguo)->get('/expedientes');
-        $response->assertOk();
-
-        // Debe ser 0 resultados por fail-secure
-        $archivos = $response->viewData('page')['props']['archivos']['data'];
-        $this->assertEmpty($archivos);
-
-        $alumnos = $response->viewData('page')['props']['alumnos'];
-        $this->assertEmpty($alumnos);
+        $this->assertExpedientesDenegadosSinEfectos($userAmbiguo, Alumno::all()->all(), []);
     }
 
     /**
@@ -330,10 +289,7 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
             'activo' => 1,
         ]);
 
-        $response = $this->actingAs($userUnknown)->get('/expedientes');
-        $response->assertOk();
-
-        $this->assertEmpty($response->viewData('page')['props']['archivos']['data']);
+        $this->assertExpedientesDenegadosSinEfectos($userUnknown, [], []);
     }
 
     /**
@@ -383,6 +339,8 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
         // Intento de descargar documento ajeno
         $resDescarga = $this->actingAs($userDocente)->get("/expedientes/{$archivoAjeno->id}/descargar");
         $resDescarga->assertStatus(403);
+        $this->assertSame('Contenido confidencial', Storage::disk('local')->get('expedientes/serv_secreto_3c.pdf'));
+        $this->assertExpedientesDenegadosSinEfectos($userDocente, [$alumnoAjeno], [$archivoAjeno]);
     }
 
     /**
@@ -422,6 +380,10 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
         ]);
 
         $response->assertStatus(403);
+        $this->assertDatabaseCount('archivos_sistema', 0);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+        $this->assertSame([], Storage::disk('public')->allFiles());
+        $this->assertExpedientesDenegadosSinEfectos($userDocente, [$alumnoAjeno], []);
     }
 
     /**
@@ -482,11 +444,73 @@ class ExpedientesAutorizacionConsistenteTest extends TestCase
 
         // Docente busca "RICARDO"
         $response = $this->actingAs($userDocente)->get('/expedientes?busqueda=RICARDO');
-        $response->assertOk();
+        $response->assertForbidden();
+        $response->assertDontSee('ALUM_SEARCH_1A')->assertDontSee('ALUM_SEARCH_2A');
+        $response->assertDontSee('reporte_ricardo_1a.pdf')->assertDontSee('reporte_ricardo_2a.pdf');
+        $this->assertExpedientesDenegadosSinEfectos(
+            $userDocente,
+            [$alumno1A, $alumno2A],
+            ArchivoSistema::all()->all(),
+        );
+    }
 
-        $archivos = $response->viewData('page')['props']['archivos']['data'];
-        $this->assertCount(1, $archivos);
-        $this->assertSame('ALUM_SEARCH_1A', $archivos[0]['matricula']);
-        $this->assertSame('reporte_ricardo_1a.pdf', $archivos[0]['nombre_original']);
+    /**
+     * @param  array<int, Alumno>  $alumnos
+     * @param  array<int, ArchivoSistema>  $archivos
+     */
+    private function assertExpedientesDenegadosSinEfectos(User $usuario, array $alumnos, array $archivos): void
+    {
+        $policy = new ArchivoSistemaPolicy;
+        $alumnosAntes = Alumno::all()->map->getAttributes()->all();
+        $archivosAntes = ArchivoSistema::all()->map->getAttributes()->all();
+        $almacenamientoAntes = [];
+        foreach (['local', 'public'] as $disco) {
+            foreach (Storage::disk($disco)->allFiles() as $ruta) {
+                $almacenamientoAntes[$disco][$ruta] = Storage::disk($disco)->get($ruta);
+            }
+        }
+
+        $this->assertFalse($policy->viewAny($usuario));
+        $this->assertFalse($policy->create($usuario));
+        $this->actingAs($usuario);
+        $listado = $this->get(route('expedientes.index'))->assertForbidden();
+        $busqueda = $this->get(route('expedientes.index', ['busqueda' => 'Alumno']))->assertForbidden();
+        foreach ($alumnos as $alumno) {
+            $this->assertFalse($policy->canAccessAlumno($usuario, $alumno));
+            $this->assertFalse($policy->create($usuario, $alumno));
+            $listado->assertDontSee($alumno->matricula);
+            $busqueda->assertDontSee($alumno->matricula);
+            $this->post(route('expedientes.store'), [
+                'matricula' => $alumno->matricula,
+                'archivo' => UploadedFile::fake()->create('denegado.pdf', 1, 'application/pdf'),
+            ])->assertForbidden();
+        }
+        foreach ($archivos as $archivo) {
+            $this->assertFalse($policy->view($usuario, $archivo));
+            $this->assertFalse($policy->delete($usuario, $archivo));
+            $listado->assertDontSee($archivo->nombre_original)->assertDontSee($archivo->nombre_servidor);
+            $busqueda->assertDontSee($archivo->nombre_original)->assertDontSee($archivo->nombre_servidor);
+            $visualizacion = $this->get(route('expedientes.ver', $archivo->id))->assertForbidden();
+            $descarga = $this->get(route('expedientes.descargar', $archivo->id))->assertForbidden();
+            $visualizacion->assertDontSee($archivo->nombre_original)->assertDontSee($archivo->nombre_servidor);
+            $descarga->assertDontSee($archivo->nombre_original)->assertDontSee($archivo->nombre_servidor);
+            $ruta = 'expedientes/'.$archivo->nombre_servidor;
+            if (Storage::disk('local')->exists($ruta)) {
+                $contenido = Storage::disk('local')->get($ruta);
+                $visualizacion->assertDontSee($contenido);
+                $descarga->assertDontSee($contenido);
+            }
+            $this->delete(route('expedientes.destroy', $archivo->id))->assertForbidden();
+        }
+
+        $this->assertSame($alumnosAntes, Alumno::all()->map->getAttributes()->all());
+        $this->assertSame($archivosAntes, ArchivoSistema::all()->map->getAttributes()->all());
+        $almacenamientoDespues = [];
+        foreach (['local', 'public'] as $disco) {
+            foreach (Storage::disk($disco)->allFiles() as $ruta) {
+                $almacenamientoDespues[$disco][$ruta] = Storage::disk($disco)->get($ruta);
+            }
+        }
+        $this->assertSame($almacenamientoAntes, $almacenamientoDespues);
     }
 }

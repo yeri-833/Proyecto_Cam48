@@ -29,7 +29,7 @@ class AlumnosAutorizacionTest extends TestCase
     }
 
     #[DataProvider('rolesAdministrativos')]
-    public function test_administrador_puede_actualizar_datos_y_asignacion_del_alumno(string $rol): void
+    public function test_personal_autorizado_puede_actualizar_datos_y_asignacion_del_alumno(string $rol): void
     {
         $admin = User::factory()->create(['role' => $rol]);
         $alumno = $this->crearAlumno();
@@ -49,13 +49,13 @@ class AlumnosAutorizacionTest extends TestCase
         $this->assertSame(10, $alumno->edad);
     }
 
-    #[DataProvider('rolesDocentes')]
-    public function test_docente_edita_datos_de_su_alumno_sin_perder_campos_omitidos(string $rol): void
+    #[DataProvider('rolesSecretaria')]
+    public function test_secretaria_edita_datos_del_alumno_sin_perder_campos_omitidos(string $rol): void
     {
-        $docente = $this->crearPersonal($rol, '1° A');
+        $secretaria = $this->crearPersonal($rol, '1° A');
         $alumno = $this->crearAlumno();
 
-        $this->actingAs($docente)->put(route('alumnos.update', $alumno->matricula), [
+        $this->actingAs($secretaria)->put(route('alumnos.update', $alumno->matricula), [
             'nombre' => 'Nombre corregido',
             'apellido' => 'Apellido ficticio',
             'comentarios' => 'Observación ficticia',
@@ -150,6 +150,11 @@ class AlumnosAutorizacionTest extends TestCase
             'docente sin grupo' => ['Docente', null, true],
             'docente ambiguo' => ['Docente', 'A', true],
             'docente inactivo' => ['Docente', '1 A', false],
+            'docente con grupo' => ['Docente', '1 A', true],
+            'profesor con grupo' => ['Profesor', '1 A', true],
+            'maestro con grupo' => ['Maestro', '1 A', true],
+            'admin retirado' => ['admin', '1 A', true],
+            'administrador retirado' => ['Administrador', '1 A', true],
             'personal sin grupo' => ['Personal', null, true],
             'personal con alcance no definido' => ['Personal', '1 A', true],
             'administrativo sin facultades definidas' => ['Administrativo', '1 A', true],
@@ -208,10 +213,10 @@ class AlumnosAutorizacionTest extends TestCase
 
     public function test_payload_del_formulario_preserva_la_asignacion_y_el_sexo_originales(): void
     {
-        $docente = $this->crearPersonal('Docente', '1 A');
+        $secretaria = $this->crearPersonal('Secretaria', '1 A');
         $alumno = $this->crearAlumno(['nivel_educativo' => 'PRIMARIA', 'sexo' => 'F']);
 
-        $this->actingAs($docente)->post(route('alumnos.update', $alumno->matricula), [
+        $this->actingAs($secretaria)->post(route('alumnos.update', $alumno->matricula), [
             '_method' => 'put',
             'matricula' => $alumno->matricula,
             'nombre' => 'Nombre corregido',
@@ -229,23 +234,20 @@ class AlumnosAutorizacionTest extends TestCase
         $this->assertSame('F', $alumno->sexo);
     }
 
-    public function test_recorte_del_transporte_no_reasigna_campos_legacy_espaciados(): void
+    public function test_secretaria_preserva_campos_legacy_espaciados_omitidos(): void
     {
-        $docente = $this->crearPersonal('Docente', '1 A');
+        $secretaria = $this->crearPersonal('Secretaria', '1 A');
         $alumno = $this->crearAlumno([
             'nivel_educativo' => ' PRIMARIA ',
             'grado' => ' 1° ',
             'grupo' => ' a ',
         ]);
 
-        $this->actingAs($docente)->post(route('alumnos.update', $alumno->matricula), [
+        $this->actingAs($secretaria)->post(route('alumnos.update', $alumno->matricula), [
             '_method' => 'put',
             'matricula' => $alumno->matricula,
             'nombre' => 'Nombre corregido',
             'apellido' => $alumno->apellido,
-            'nivel_educativo' => ' PRIMARIA ',
-            'grado' => ' 1° ',
-            'grupo' => ' a ',
         ])->assertRedirect();
 
         $alumno->refresh();
@@ -335,43 +337,43 @@ class AlumnosAutorizacionTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_docente_conserva_edicion_de_nombre_de_su_perfil_sin_cambiar_correo(): void
+    public function test_secretaria_conserva_edicion_de_nombre_de_su_perfil_sin_cambiar_correo(): void
     {
-        $docente = $this->crearPersonal('Docente', '1 A');
-        $correoOriginal = $docente->email;
+        $secretaria = $this->crearPersonal('Secretaria', '1 A');
+        $correoOriginal = $secretaria->email;
 
-        $this->actingAs($docente)->patch(route('profile.update'), [
-            'name' => 'Nombre docente ficticio',
+        $this->actingAs($secretaria)->patch(route('profile.update'), [
+            'name' => 'Nombre secretaria ficticio',
             'email' => $correoOriginal,
         ])->assertRedirect(route('profile.edit'));
 
-        $docente->refresh();
-        $this->assertSame('Nombre docente ficticio', $docente->name);
-        $this->assertSame($correoOriginal, $docente->email);
+        $secretaria->refresh();
+        $this->assertSame('Nombre secretaria ficticio', $secretaria->name);
+        $this->assertSame($correoOriginal, $secretaria->email);
     }
 
     public function test_perfil_no_admite_correo_ni_rol_inyectados_fuera_de_los_campos_validados(): void
     {
-        $docente = $this->crearPersonal('Docente', '1 A');
-        $correoOriginal = $docente->email;
+        $secretaria = $this->crearPersonal('Secretaria', '1 A');
+        $correoOriginal = $secretaria->email;
 
-        $this->actingAs($docente)->patch(route('profile.update'), [
-            'name' => 'Docente ficticio',
+        $this->actingAs($secretaria)->patch(route('profile.update'), [
+            'name' => 'Secretaria ficticia',
             'email' => $correoOriginal,
             'correo' => 'otra.ficha@cam48.test',
             'role' => 'admin',
             'tipo_usuario' => 'Director',
         ])->assertRedirect(route('profile.edit'));
 
-        $docente->refresh();
-        $this->assertSame($correoOriginal, $docente->email);
-        $this->assertSame('Docente', $docente->role);
-        $this->assertFalse($docente->isAdmin());
+        $secretaria->refresh();
+        $this->assertSame($correoOriginal, $secretaria->email);
+        $this->assertSame('Secretaria', $secretaria->role);
+        $this->assertFalse($secretaria->isAdmin());
     }
 
     public function test_cambio_de_correo_administrativo_invalida_verificacion_previa(): void
     {
-        $admin = User::factory()->create(['role' => 'admin', 'email_verified_at' => now()]);
+        $admin = User::factory()->create(['role' => 'Director', 'email_verified_at' => now()]);
 
         $this->actingAs($admin)->patch(route('profile.update'), [
             'name' => 'Administrador ficticio',
@@ -386,13 +388,18 @@ class AlumnosAutorizacionTest extends TestCase
     /** @return array<string, array{string}> */
     public static function rolesAdministrativos(): array
     {
-        return ['admin' => ['admin'], 'administrador' => ['Administrador'], 'director' => ['Director']];
+        return [
+            'director' => ['Director'],
+            'directivo' => ['Directivo'],
+            'secretaria' => ['Secretaria'],
+            'secretario' => ['Secretario'],
+        ];
     }
 
     /** @return array<string, array{string}> */
-    public static function rolesDocentes(): array
+    public static function rolesSecretaria(): array
     {
-        return ['docente' => ['Docente'], 'profesor' => ['Profesor'], 'maestro' => ['Maestro']];
+        return ['secretaria' => ['Secretaria'], 'secretario' => ['Secretario']];
     }
 
     private function crearPersonal(string $rol, ?string $asignacion, bool $activo = true): User

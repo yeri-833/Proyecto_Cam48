@@ -20,7 +20,7 @@ class AsistenciaFlujoCompletoTest extends TestCase
      */
     public function test_registro_asistencia_alumno_exitoso_y_cooldown(): void
     {
-        $user = User::first() ?? User::factory()->create(['role' => 'admin']);
+        $user = User::factory()->create(['role' => 'Director']);
 
         // Crear o buscar alumno de prueba
         $alumno = Alumno::firstOrCreate(
@@ -63,7 +63,7 @@ class AsistenciaFlujoCompletoTest extends TestCase
      */
     public function test_rechaza_alumno_inactivo(): void
     {
-        $user = User::first() ?? User::factory()->create(['role' => 'admin']);
+        $user = User::factory()->create(['role' => 'Director']);
 
         $alumno = Alumno::firstOrCreate(
             ['matricula' => 'TEST_INACTIVO_01'],
@@ -95,7 +95,7 @@ class AsistenciaFlujoCompletoTest extends TestCase
      */
     public function test_vistas_historial_y_estadisticas_cargan_correctamente(): void
     {
-        $user = User::first() ?? User::factory()->create(['role' => 'admin']);
+        $user = User::factory()->create(['role' => 'Secretaria']);
 
         $resHistorial = $this->actingAs($user)->get('/historial');
         $resHistorial->assertStatus(200);

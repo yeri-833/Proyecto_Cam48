@@ -4,10 +4,99 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class AutenticacionSeguraTest extends TestCase
 {
+    public static function rolesInstitucionales(): array
+    {
+        return [
+            'director' => ['Director', true],
+            'directivo' => ['Directivo', true],
+            'administrador' => ['Administrador', false],
+            'admin' => ['Admin', false],
+            'normalizado' => ['  dIrEcTiVo  ', true],
+            'docente' => ['Docente', false],
+            'personal' => ['Personal', false],
+            'secretaria' => ['Secretaria', false],
+            'secretario' => [' Secretario ', false],
+            'operador' => ['Operador', false],
+            'desconocido' => ['Desconocido', false],
+        ];
+    }
+
+    #[DataProvider('rolesInstitucionales')]
+    public function test_roles_conservan_acceso_escolar_sin_elevar_privilegios(string $rol, bool $administrador): void
+    {
+        $user = User::create([
+            'nombre_completo' => 'Usuario Sintetico',
+            'correo' => 'roles@example.test',
+            'password' => Hash::make('synthetic-password-123'),
+            'tipo_usuario' => $rol,
+        ]);
+
+        $this->assertSame($administrador, $user->isAdmin());
+        $escolar = in_array($rol, ['Director', 'Directivo', '  dIrEcTiVo  ', 'Secretaria', ' Secretario '], true);
+        $this->assertSame($escolar, $user->isPersonal());
+        $this->actingAs($user)->get('/dashboard')->assertStatus($escolar ? 200 : 403);
+        if ($escolar || $rol === 'Operador') {
+            $this->get('/login')->assertRedirect(route($rol === 'Operador' ? 'asistencia.escaner' : 'dashboard'));
+        } else {
+            $this->get('/login')->assertForbidden();
+        }
+        $this->get('/register')->assertStatus($administrador ? 200 : 403);
+
+        if (! $administrador) {
+            $before = User::count();
+            $this->post('/register', [
+                'name' => 'Cuenta No Autorizada',
+                'email' => 'unauthorized@example.test',
+                'password' => 'synthetic-password-123',
+                'password_confirmation' => 'synthetic-password-123',
+                'tipo_usuario' => 'Director',
+            ])->assertForbidden();
+            $this->assertSame($before, User::count());
+            $this->assertAuthenticatedAs($user);
+        }
+    }
+
+    public function test_invitado_no_accede_dashboard_ni_crea_directivo(): void
+    {
+        $before = User::count();
+        $this->get('/dashboard')->assertRedirect(route('login'));
+        $this->post('/register', [
+            'name' => 'Cuenta Publica Sintetica',
+            'email' => 'public@example.test',
+            'password' => 'synthetic-password-123',
+            'password_confirmation' => 'synthetic-password-123',
+            'tipo_usuario' => 'Directivo',
+        ])->assertRedirect(route('login'));
+        $this->assertSame($before, User::count());
+        $this->assertGuest();
+    }
+
+    public function test_perfil_no_permite_asignar_roles_administrativos(): void
+    {
+        $user = User::create([
+            'nombre_completo' => 'Docente Sintetico',
+            'correo' => 'profile@example.test',
+            'password' => Hash::make('synthetic-password-123'),
+            'tipo_usuario' => 'Docente',
+        ]);
+
+        $this->actingAs($user)->patch('/profile', [
+            'name' => 'Docente Sintetico Actualizado',
+            'email' => 'profile@example.test',
+            'role' => 'Admin',
+            'tipo_usuario' => 'Directivo',
+        ])->assertForbidden();
+
+        $this->assertSame('Docente', $user->refresh()->tipo_usuario);
+        $this->assertSame('Docente Sintetico', $user->nombre_completo);
+        $this->assertFalse($user->isAdmin());
+    }
+
     /**
      * Verifica que la pantalla de inicio de sesión se renderiza correctamente.
      */
@@ -26,7 +115,7 @@ class AutenticacionSeguraTest extends TestCase
             'nombre_completo' => 'Usuario Login Test',
             'correo' => 'login_test@cam48.edu.mx',
             'password' => Hash::make('password123'),
-            'tipo_usuario' => 'Docente',
+            'tipo_usuario' => 'Secretario',
         ]);
 
         $response = $this->post('/login', [
@@ -35,7 +124,7 @@ class AutenticacionSeguraTest extends TestCase
         ]);
 
         $this->assertAuthenticated();
-        $response->assertRedirect(route('dashboard', absolute: false));
+        $response->assertRedirect(route('dashboard'));
     }
 
     /**
@@ -139,7 +228,7 @@ class AutenticacionSeguraTest extends TestCase
             'nombre_completo' => 'Usuario Cambio Pass',
             'correo' => 'cambio_pass@cam48.edu.mx',
             'password' => Hash::make('clave_anterior_123'),
-            'tipo_usuario' => 'Docente',
+            'tipo_usuario' => 'Secretaria',
         ]);
 
         $response = $this->actingAs($user)->put('/password', [
@@ -161,7 +250,7 @@ class AutenticacionSeguraTest extends TestCase
             'nombre_completo' => 'Usuario Error Pass',
             'correo' => 'error_pass@cam48.edu.mx',
             'password' => Hash::make('clave_real_123'),
-            'tipo_usuario' => 'Docente',
+            'tipo_usuario' => 'Secretaria',
         ]);
 
         $response = $this->actingAs($user)->put('/password', [
@@ -173,6 +262,7 @@ class AutenticacionSeguraTest extends TestCase
         $response->assertSessionHasErrors('current_password');
         $this->assertTrue(Hash::check('clave_real_123', $user->fresh()->password));
     }
+
     /**
      * Verifica que el rol histórico "Directivo" conserve sus permisos administrativos.
      */
@@ -212,5 +302,4 @@ class AutenticacionSeguraTest extends TestCase
 
         $this->get('/dashboard')->assertOk();
     }
-
 }

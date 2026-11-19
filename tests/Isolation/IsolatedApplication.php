@@ -3,6 +3,7 @@
 namespace Tests\Isolation;
 
 use App\Console\Commands\SyncTelegramUpdates;
+use App\Http\Middleware\EnsureAuthorizedProfile;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Filesystem\Filesystem;
@@ -36,7 +37,9 @@ final class IsolatedApplication
             ->withRouting(web: $root.'/routes/web.php', api: $root.'/routes/api.php', commands: $root.'/routes/console.php', health: '/up')
             ->withCommands([SyncTelegramUpdates::class])
             ->withMiddleware(function (Middleware $middleware): void {
+                $middleware->redirectUsersTo([EnsureAuthorizedProfile::class, 'redirectAuthenticated']);
                 $middleware->web(append: [
+                    EnsureAuthorizedProfile::class,
                     HandleInertiaRequests::class,
                     AddLinkHeadersForPreloadedAssets::class,
                 ]);

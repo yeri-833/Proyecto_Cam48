@@ -13,7 +13,7 @@ class TutorCorreoPersistenciaTest extends TestCase
     #[DataProvider('estadosDelTutor')]
     public function test_formulario_persiste_correo_al_crear_o_actualizar_tutor(bool $existente): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
         $alumno = Alumno::create([
             'matricula' => 'FICT_CORREO',
             'nombre' => 'Alumno',
@@ -53,7 +53,7 @@ class TutorCorreoPersistenciaTest extends TestCase
     #[DataProvider('correosNoInformados')]
     public function test_actualizacion_sin_correo_informado_conserva_todos_los_datos(array $campos): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
         $tutor = $this->crearTutorConCorreo();
         $antes = $tutor->getAttributes();
 
@@ -67,7 +67,7 @@ class TutorCorreoPersistenciaTest extends TestCase
 
     public function test_correo_valido_actualiza_solo_el_correo_del_tutor(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
         $tutor = $this->crearTutorConCorreo();
         $esperado = $tutor->getAttributes();
         $esperado['t1_email'] = 'nuevo@example.test';
@@ -82,7 +82,7 @@ class TutorCorreoPersistenciaTest extends TestCase
 
     public function test_correo_invalido_rechaza_la_solicitud_sin_modificar_datos(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
         $tutor = $this->crearTutorConCorreo();
         $antes = $tutor->getAttributes();
 
@@ -110,7 +110,7 @@ class TutorCorreoPersistenciaTest extends TestCase
 
     public function test_alta_con_correo_vacio_conserva_su_caracter_opcional(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Secretaria']);
         Alumno::create([
             'matricula' => 'FICT_CORREO',
             'nombre' => 'Alumno',

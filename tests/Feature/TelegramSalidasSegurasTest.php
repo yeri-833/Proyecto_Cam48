@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\TelegramService;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Database\QueryException;
+use Illuminate\Foundation\Bootstrap\HandleExceptions;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -32,6 +33,16 @@ class TelegramSalidasSegurasTest extends TestCase
         config(['telegram.bot_token' => self::BotToken]);
         Http::preventStrayRequests();
         Log::spy();
+    }
+
+    protected function tearDown(): void
+    {
+        try {
+            parent::tearDown();
+        } finally {
+            // Mockery puede fallar antes de que Laravel limpie sus manejadores.
+            HandleExceptions::flushState($this);
+        }
     }
 
     #[DataProvider('respuestasHttpFallidas')]
@@ -101,7 +112,7 @@ class TelegramSalidasSegurasTest extends TestCase
     #[DataProvider('fallosSinteticos')]
     public function test_endpoint_sync_no_expone_excepciones_en_http_ni_logs(string $tipo): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Director']);
         Artisan::shouldReceive('call')->once()->with('telegram:sync')->andThrow($this->crearExcepcion($tipo));
 
         $response = $this->actingAs($admin)->getJson(route('telegram.sync'));
@@ -114,7 +125,7 @@ class TelegramSalidasSegurasTest extends TestCase
     #[DataProvider('codigosDeSalida')]
     public function test_endpoint_no_reenvia_salida_arbitraria_del_comando(int $exitCode): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Director']);
         Artisan::shouldReceive('call')->once()->with('telegram:sync')->andReturn($exitCode);
         Artisan::shouldReceive('output')->andReturn(self::ChatId.' '.self::BotToken.' '.self::VincToken.' PERSONA_FICTICIA_SQL');
 
@@ -144,7 +155,7 @@ class TelegramSalidasSegurasTest extends TestCase
 
     public function test_endpoint_sanea_errores_al_adquirir_el_bloqueo(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Director']);
         $realCacheManager = Cache::getFacadeRoot();
         Cache::shouldReceive('driver')->andReturnUsing(
             static fn (?string $store = null): Repository => $realCacheManager->driver($store),

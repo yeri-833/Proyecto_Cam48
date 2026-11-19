@@ -21,7 +21,7 @@ Route::get('/', function () {
 });
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified', 'can:personal-access'])->name('dashboard');
+    ->middleware(['auth', 'verified', 'can:dashboard.consultar'])->name('dashboard');
 
 Route::put('/alumnos/{matricula}', [AlumnoController::class, 'update'])
     ->middleware(['auth', 'can:alumnos.actualizar'])->name('alumnos.update');
@@ -93,13 +93,13 @@ Route::middleware('auth')->group(function () {
 
     // Expediente Digital de Alumnos (Rutas protegidas con autenticación y Policy)
     Route::get('/expedientes', [ExpedienteController::class, 'index'])
-        ->middleware('can:personal-access')->name('expedientes.index');
+        ->middleware('can:expedientes.consultar')->name('expedientes.index');
     Route::post('/expedientes', [ExpedienteController::class, 'store'])
-        ->middleware('can:personal-access')->name('expedientes.store');
+        ->middleware('can:expedientes.gestionar')->name('expedientes.store');
     Route::get('/expedientes/{id}/ver', [ExpedienteController::class, 'ver'])
-        ->middleware('can:personal-access')->name('expedientes.ver');
+        ->middleware('can:expedientes.consultar')->name('expedientes.ver');
     Route::get('/expedientes/{id}/descargar', [ExpedienteController::class, 'descargar'])
-        ->middleware('can:personal-access')->name('expedientes.descargar');
+        ->middleware('can:expedientes.consultar')->name('expedientes.descargar');
     Route::delete('/expedientes/{id}', [ExpedienteController::class, 'destroy'])
         ->middleware('can:admin-access')->name('expedientes.destroy');
 
@@ -157,13 +157,13 @@ Route::middleware('auth')->group(function () {
     Route::delete('/eventos/{id}', [EventoController::class, 'destroy'])
         ->middleware('can:eventos.eliminar')->name('eventos.destroy');
     Route::get('/eventos/{id}/convocatorias', [EventoController::class, 'convocatorias'])
-        ->middleware('can:eventos.consultar')->name('eventos.convocatorias');
+        ->middleware('can:convocatorias.consultar')->name('eventos.convocatorias');
     Route::post('/eventos/{id}/convocar', [EventoController::class, 'convocar'])
-        ->middleware('can:eventos.crear')->name('eventos.convocar');
+        ->middleware('can:convocatorias.gestionar')->name('eventos.convocar');
     Route::delete('/eventos/{id}/convocatorias/{tutorId}', [EventoController::class, 'desconvocar'])
-        ->middleware('can:eventos.eliminar')->name('eventos.desconvocar');
+        ->middleware('can:convocatorias.desconvocar')->name('eventos.desconvocar');
     Route::post('/eventos/{id}/asistencia-manual/{tutorId}', [EventoController::class, 'marcarAsistenciaManual'])
-        ->middleware('can:eventos.crear')->name('eventos.asistenciaManual');
+        ->middleware('can:asistencias.manual')->name('eventos.asistenciaManual');
 });
 
 require __DIR__.'/auth.php';

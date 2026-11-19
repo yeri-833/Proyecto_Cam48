@@ -3,30 +3,23 @@
 namespace App\Policies;
 
 use App\Models\Alumno;
-use App\Models\Personal;
 use App\Models\User;
 
 class AlumnoPolicy
 {
     public function view(User $user, Alumno $alumno): bool
     {
-        return $user->isAdmin() || Alumno::query()
-            ->accessibleTo($user)
-            ->whereKey($alumno->getKey())
-            ->exists();
+        return $user->isDirector() || $user->isSecretaria();
     }
 
     public function create(User $user): bool
     {
-        return $user->isAdmin();
+        return $user->isDirector() || $user->isSecretaria();
     }
 
     public function updateAny(User $user): bool
     {
-        return $user->isAdmin() || (
-            in_array(strtolower($user->role), ['docente', 'profesor', 'maestro'], true)
-            && Personal::verifiedAssignmentFor($user) !== null
-        );
+        return $user->isDirector() || $user->isSecretaria();
     }
 
     public function update(User $user, Alumno $alumno): bool
@@ -36,6 +29,6 @@ class AlumnoPolicy
 
     public function updateAssignment(User $user, Alumno $alumno): bool
     {
-        return $user->isAdmin();
+        return $user->isDirector() || $user->isSecretaria();
     }
 }

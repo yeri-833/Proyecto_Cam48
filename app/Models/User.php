@@ -116,24 +116,44 @@ class User extends Authenticatable
     }
 
     /**
-     * Comprueba si el usuario tiene rol administrativo (Director, Directivo, Administrador o Admin).
+     * Alias interno de compatibilidad para el perfil Director.
      */
     public function isAdmin(): bool
     {
-        // Normaliza espacios y mayúsculas para reconocer los valores históricos del rol.
-        $role = strtolower(trim($this->role));
+        return $this->isDirector();
+    }
 
-        return in_array($role, ['admin', 'administrador', 'director', 'directivo'], true);
+    public function isDirector(): bool
+    {
+        return $this->canonicalRole() === 'Director';
+    }
+
+    public function isSecretaria(): bool
+    {
+        return $this->canonicalRole() === 'Secretaria';
+    }
+
+    public function isOperador(): bool
+    {
+        return $this->canonicalRole() === 'Operador';
+    }
+
+    public function canonicalRole(): ?string
+    {
+        return match (strtolower(trim($this->role))) {
+            'director', 'directivo' => 'Director',
+            'secretaria', 'secretario' => 'Secretaria',
+            'operador' => 'Operador',
+            default => null,
+        };
     }
 
     /**
-     * Comprueba si el usuario es personal escolar autorizado (Docente, Personal o Admin).
+     * Compatibilidad interna para Director y Secretaria; no sustituye Gates por operación.
      */
     public function isPersonal(): bool
     {
-        $role = strtolower($this->role);
-
-        return $this->isAdmin() || in_array($role, ['docente', 'personal', 'profesor', 'maestro', 'administrativo']);
+        return $this->isDirector() || $this->isSecretaria();
     }
 
     /**
@@ -141,9 +161,7 @@ class User extends Authenticatable
      */
     public function isKiosco(): bool
     {
-        $role = strtolower($this->role);
-
-        return $this->isAdmin() || in_array($role, ['operador', 'kiosco', 'asistencia', 'prefectura']);
+        return $this->isDirector() || $this->isOperador();
     }
 
     /**

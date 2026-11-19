@@ -52,6 +52,9 @@ class CredencialController extends Controller
 
         // 2. Personal: consulta indexada y ordenada
         $personalQuery = Personal::where('activo', 1);
+        if (! $user->isDirector()) {
+            $personalQuery->whereRaw('0 = 1');
+        }
         if (! empty($busqueda) && in_array($filtro, ['personal', 'todos'])) {
             $personalQuery->where(function ($q) use ($busqueda) {
                 $q->where('id', 'LIKE', "%{$busqueda}%")

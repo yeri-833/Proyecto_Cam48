@@ -6,6 +6,7 @@ use App\Jobs\NotificarAvisoPersonalJob;
 use App\Models\Personal;
 use App\Models\User;
 use App\Services\TelegramService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -30,7 +31,7 @@ class NotificacionesPersonalAsincronasTest extends TestCase
     {
         Queue::fake();
 
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'Director']);
         Personal::create([
             'id' => 'DOC_101',
             'nombre_completo' => 'Docente Uno',
@@ -210,8 +211,8 @@ class NotificacionesPersonalAsincronasTest extends TestCase
             'canal' => 'Telegram',
             'estado' => 'EN_PROCESO',
             'intentos' => 1,
-            'created_at' => \Carbon\Carbon::now()->subMinutes(15),
-            'updated_at' => \Carbon\Carbon::now()->subMinutes(15),
+            'created_at' => Carbon::now()->subMinutes(15),
+            'updated_at' => Carbon::now()->subMinutes(15),
         ]);
 
         $telegramMock = Mockery::mock(TelegramService::class);
@@ -250,8 +251,8 @@ class NotificacionesPersonalAsincronasTest extends TestCase
             'canal' => 'Telegram',
             'estado' => 'EN_PROCESO',
             'intentos' => 3,
-            'created_at' => \Carbon\Carbon::now(),
-            'updated_at' => \Carbon\Carbon::now(),
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
         ]);
 
         $job = new NotificarAvisoPersonalJob($personal, 'Mensaje que fallara', $idempotencyKey);

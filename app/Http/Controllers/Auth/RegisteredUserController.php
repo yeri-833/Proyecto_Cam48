@@ -46,7 +46,7 @@ class RegisteredUserController extends Controller
             'tipo_usuario' => [
                 'required',
                 'string',
-                Rule::in(['Docente', 'Administrativo', 'Operador', 'Director', 'Personal']),
+                Rule::in(['Director', 'Secretaria', 'Operador']),
             ],
         ], [
             'tipo_usuario.in' => 'El rol seleccionado no es válido en la estructura institucional.',

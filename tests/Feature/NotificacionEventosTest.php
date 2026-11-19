@@ -18,7 +18,7 @@ class NotificacionEventosTest extends TestCase
         // Engañamos al sistema para que no envíe nada de verdad y solo capture los Jobs
         Queue::fake();
 
-        $user = User::first() ?? User::factory()->create(['role' => 'docente']);
+        $user = User::factory()->create(['role' => 'Secretaria']);
 
         // Ejecutar petición para crear un evento
         $response = $this->actingAs($user)->postJson('/eventos', [

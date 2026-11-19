@@ -8,6 +8,7 @@ import axios from 'axios';
 const menuOpen = ref(false);
 const page = usePage();
 const user = page.props.auth.user;
+const can = (ability) => page.props.auth.permissions?.[ability] === true;
 
 // --- Lógica de Modo Oscuro ---
 const isDark = ref(false);
@@ -66,7 +67,7 @@ onMounted(() => {
 
     // Polling condicional para tutores y personal
     const isRelevantPage = window.location.pathname.includes('/tutores') || window.location.pathname.includes('/personal');
-    if (isRelevantPage) {
+    if (isRelevantPage && can('telegram.sincronizar')) {
         syncInterval = setInterval(checkTelegramSync, 60000);
     }
 
@@ -147,7 +148,7 @@ const confirmarSalida = () => {
         >
             <!-- Header Branding -->
             <div class="px-3 py-4 border-b border-white/[0.08] relative">
-                <Link 
+                <Link v-if="can('dashboard.consultar')"
                     :href="route('dashboard')" 
                     class="flex items-center justify-start overflow-hidden group focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 rounded-2xl p-1 transition-all w-full"
                     title="FamilyLock CAM #48 — Dashboard"
@@ -167,7 +168,7 @@ const confirmarSalida = () => {
                 
                 <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-1 pb-2">Principal</p>
 
-                <Link 
+                <Link v-if="can('dashboard.consultar')"
                     :href="route('dashboard')" 
                     :class="route().current('dashboard') ? 'sidebar-link-active' : 'sidebar-link'" 
                     class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
@@ -178,7 +179,7 @@ const confirmarSalida = () => {
                     <span>Dashboard</span>
                 </Link>
 
-                <Link 
+                <Link v-if="can('personal.consultar')"
                     href="/personal" 
                     :class="$page.url.startsWith('/personal') ? 'sidebar-link-active' : 'sidebar-link'" 
                     class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
@@ -189,7 +190,7 @@ const confirmarSalida = () => {
                     <span>Personal</span>
                 </Link>
 
-                <Link 
+                <Link v-if="can('tutores.consultar')"
                     :href="route('tutores.index')" 
                     :class="route().current('tutores.index') ? 'sidebar-link-active' : 'sidebar-link'" 
                     class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
@@ -202,7 +203,7 @@ const confirmarSalida = () => {
 
                 <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-3 pb-2">Operación</p>
 
-                <Link 
+                <Link v-if="can('historial.consultar')"
                     :href="route('historial.index')" 
                     :class="route().current('historial.index') ? 'sidebar-link-active' : 'sidebar-link'" 
                     class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
@@ -213,7 +214,7 @@ const confirmarSalida = () => {
                     <span>Historial</span>
                 </Link>
 
-                <Link 
+                <Link v-if="can('expedientes.consultar')"
                     :href="route('expedientes.index')" 
                     :class="route().current('expedientes.index') ? 'sidebar-link-active' : 'sidebar-link'" 
                     class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
@@ -224,7 +225,7 @@ const confirmarSalida = () => {
                     <span>Expedientes</span>
                 </Link>
                 
-                <Link 
+                <Link v-if="can('asistencia.escanear')"
                     :href="route('asistencia.escaner')" 
                     :class="route().current('asistencia.escaner') ? 'sidebar-link-active' : 'sidebar-link'" 
                     class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
@@ -235,7 +236,7 @@ const confirmarSalida = () => {
                     <span>Pase de Lista</span>
                 </Link>
 
-                <Link 
+                <Link v-if="can('credenciales.generar')"
                     :href="route('credenciales.index')" 
                     :class="route().current('credenciales.index') ? 'sidebar-link-active' : 'sidebar-link'" 
                     class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
@@ -248,7 +249,7 @@ const confirmarSalida = () => {
 
                 <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-3 pb-2">Análisis</p>
                 
-                <Link 
+                <Link v-if="can('estadisticas.consultar')"
                     :href="route('estadisticas.index')" 
                     :class="route().current('estadisticas.index') ? 'sidebar-link-active' : 'sidebar-link'" 
                     class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
@@ -259,7 +260,7 @@ const confirmarSalida = () => {
                     <span>Estadísticas</span>
                 </Link>
                 
-                <Link 
+                <Link v-if="can('eventos.consultar')"
                     :href="route('eventos.index')" 
                     :class="route().current('eventos.index') ? 'sidebar-link-active' : 'sidebar-link'" 
                     class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
@@ -307,7 +308,7 @@ const confirmarSalida = () => {
                 aria-label="Menú de navegación móvil"
             >
                 <div class="px-3 py-4 border-b border-white/[0.08] flex items-center justify-between">
-                    <Link :href="route('dashboard')" class="flex items-center" @click="menuOpen = false">
+                    <Link v-if="can('dashboard.consultar')"  :href="route('dashboard')" class="flex items-center" @click="menuOpen = false">
                         <ApplicationLogo variant="horizontal" force-theme="dark" size="h-12" alt="CAM Tonalpouhqui #48" class="w-auto" />
                     </Link>
                     <button @click="menuOpen = false" class="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center text-sm transition-all">
@@ -316,41 +317,41 @@ const confirmarSalida = () => {
                 </div>
                 <nav class="flex-1 min-h-0 px-3 py-3 space-y-0.5 text-[13px] font-medium custom-scroll overflow-y-auto">
                     <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-1 pb-2">Principal</p>
-                    <Link :href="route('dashboard')" :class="route().current('dashboard') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                    <Link v-if="can('dashboard.consultar')"  :href="route('dashboard')" :class="route().current('dashboard') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
                         <div class="w-6 text-center text-sm" :class="route().current('dashboard') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-th-large"></i></div>
                         <span>Dashboard</span>
                     </Link>
-                    <Link href="/personal" :class="$page.url.startsWith('/personal') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                    <Link v-if="can('personal.consultar')"  href="/personal" :class="$page.url.startsWith('/personal') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
                         <div class="w-6 text-center text-sm" :class="$page.url.startsWith('/personal') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-chalkboard-teacher"></i></div>
                         <span>Personal</span>
                     </Link>
-                    <Link :href="route('tutores.index')" :class="route().current('tutores.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                    <Link v-if="can('tutores.consultar')"  :href="route('tutores.index')" :class="route().current('tutores.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
                         <div class="w-6 text-center text-sm" :class="route().current('tutores.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-users"></i></div>
                         <span>Tutores</span>
                     </Link>
                     <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-3 pb-2">Operación</p>
-                    <Link :href="route('historial.index')" :class="route().current('historial.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                    <Link v-if="can('historial.consultar')"  :href="route('historial.index')" :class="route().current('historial.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
                         <div class="w-6 text-center text-sm" :class="route().current('historial.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-history"></i></div>
                         <span>Historial</span>
                     </Link>
-                    <Link :href="route('expedientes.index')" :class="route().current('expedientes.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                    <Link v-if="can('expedientes.consultar')"  :href="route('expedientes.index')" :class="route().current('expedientes.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
                         <div class="w-6 text-center text-sm" :class="route().current('expedientes.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-folder-open"></i></div>
                         <span>Expedientes</span>
                     </Link>
-                    <Link :href="route('asistencia.escaner')" :class="route().current('asistencia.escaner') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                    <Link v-if="can('asistencia.escanear')"  :href="route('asistencia.escaner')" :class="route().current('asistencia.escaner') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
                         <div class="w-6 text-center text-sm" :class="route().current('asistencia.escaner') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-qrcode"></i></div>
                         <span>Pase de Lista</span>
                     </Link>
-                    <Link :href="route('credenciales.index')" :class="route().current('credenciales.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                    <Link v-if="can('credenciales.generar')"  :href="route('credenciales.index')" :class="route().current('credenciales.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
                         <div class="w-6 text-center text-sm" :class="route().current('credenciales.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-id-card"></i></div>
                         <span>Credenciales</span>
                     </Link>
                     <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.18em] px-3 pt-3 pb-2">Análisis</p>
-                    <Link :href="route('estadisticas.index')" :class="route().current('estadisticas.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                    <Link v-if="can('estadisticas.consultar')"  :href="route('estadisticas.index')" :class="route().current('estadisticas.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
                         <div class="w-6 text-center text-sm" :class="route().current('estadisticas.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-chart-pie"></i></div>
                         <span>Estadísticas</span>
                     </Link>
-                    <Link :href="route('eventos.index')" :class="route().current('eventos.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
+                    <Link v-if="can('eventos.consultar')"  :href="route('eventos.index')" :class="route().current('eventos.index') ? 'sidebar-link-active' : 'sidebar-link'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" @click="menuOpen = false">
                         <div class="w-6 text-center text-sm" :class="route().current('eventos.index') ? 'text-sky-400' : 'text-slate-400'"><i class="fas fa-calendar-alt"></i></div>
                         <span>Agenda</span>
                     </Link>
@@ -390,7 +391,7 @@ const confirmarSalida = () => {
 
                     <!-- Mobile Institutional Brand in Header -->
                     <div class="md:hidden flex items-center">
-                        <Link :href="route('dashboard')" class="flex items-center">
+                        <Link v-if="can('dashboard.consultar')"  :href="route('dashboard')" class="flex items-center">
                             <ApplicationLogo variant="horizontal" size="h-9 sm:h-10" alt="CAM Tonalpouhqui #48" />
                         </Link>
                     </div>

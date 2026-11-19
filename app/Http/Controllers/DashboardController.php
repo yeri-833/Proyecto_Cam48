@@ -6,17 +6,19 @@ use App\Models\Alumno;
 use App\Models\Evento;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
 {
     public function index()
     {
+        Gate::authorize('dashboard.consultar');
         /** @var User|null $user */
         $user = auth()->user();
 
         $alumnosQuery = Alumno::where('activo', 1);
-        if ($user && ! $user->isAdmin()) {
+        if ($user && ! $user->isDirector() && ! $user->isSecretaria()) {
             $alumnosQuery->accessibleTo($user);
         }
 
@@ -28,7 +30,7 @@ class DashboardController extends Controller
             ->whereDate('fecha', today())
             ->where('asistible_type', Alumno::class);
 
-        if ($user && ! $user->isAdmin()) {
+        if ($user && ! $user->isDirector() && ! $user->isSecretaria()) {
             $asistenciasQuery->whereIn('asistible_id', (clone $alumnosQuery)->select('matricula'));
         }
 

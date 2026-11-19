@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\FamiliaService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
@@ -27,8 +29,8 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * @property string|null $rol Rol dentro del sistema
  * @property string|null $foto_perfil Ruta relativa de la foto en storage
  * @property string|null $fecha_registro Fecha de alta (CREATED_AT)
- * @property-read string       $nombre_completo  Accessor: nombre + apellido en mayúsculas
- * @property-read Tutor|null   $tutor            Relación 1:1 con tutores
+ * @property-read string $nombre_completo Accessor: nombre + apellido en mayúsculas
+ * @property-read Tutor|null $tutor Relación 1:1 con tutores
  * @property-read Collection<int, RegistroAsistencia> $asistencias
  */
 class Alumno extends Model
@@ -64,23 +66,11 @@ class Alumno extends Model
      */
     public function scopeAccessibleTo(Builder $query, User $user): Builder
     {
-        if ($user->isAdmin()) {
+        if ($user->isDirector() || $user->isSecretaria()) {
             return $query;
         }
 
-        $asignacion = Personal::verifiedAssignmentFor($user);
-        if ($asignacion === null) {
-            return $query->whereRaw('0 = 1');
-        }
-
-        // HEX evita equivalencias por acentos de la intercalación institucional.
-        return $query->where('alumnos.activo', 1)
-            ->whereRaw('HEX(TRIM(alumnos.grado)) IN (?, ?)', [
-                strtoupper(bin2hex($asignacion['grado'])),
-                strtoupper(bin2hex($asignacion['grado'].'°')),
-            ])
-            ->whereRaw('HEX(UPPER(TRIM(alumnos.grupo))) = ?', [strtoupper(bin2hex($asignacion['grupo']))])
-            ->whereRaw('HEX(LOWER(TRIM(alumnos.grupo))) = ?', [strtoupper(bin2hex(strtolower($asignacion['grupo'])))]);
+        return $query->whereRaw('0 = 1');
     }
 
     public function tutor(): HasOne
@@ -91,9 +81,9 @@ class Alumno extends Model
     /**
      * Tutores explícitamente vinculados a este alumno (tabla alumno_tutor).
      *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<Tutor, $this>
+     * @return BelongsToMany<Tutor, $this>
      */
-    public function tutores(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    public function tutores(): BelongsToMany
     {
         return $this->belongsToMany(Tutor::class, 'alumno_tutor', 'alumno_matricula', 'tutor_id', 'matricula', 'id')
             ->withPivot(['parentesco', 'es_tutor_principal']);
@@ -110,7 +100,7 @@ class Alumno extends Model
      */
     public function getFamiliaKeyAttribute(): string
     {
-        return app(\App\Services\FamiliaService::class)->obtenerClaveFamiliaAlumno($this);
+        return app(FamiliaService::class)->obtenerClaveFamiliaAlumno($this);
     }
 
     // Accessor para nombre completo

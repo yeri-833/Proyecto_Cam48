@@ -36,11 +36,17 @@ class AuthenticatedSessionController extends Controller
 
         /** @var User|null $user */
         $user = Auth::user();
-        if ($user && $user->isKiosco() && ! $user->isPersonal()) {
+        if (! $user || $user->canonicalRole() === null) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            abort(403);
+        }
+        if ($user->isOperador()) {
             return redirect()->route('asistencia.escaner');
         }
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->route('dashboard');
     }
 
     /**

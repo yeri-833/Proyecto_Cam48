@@ -78,11 +78,9 @@ const submit = () => {
                     class="mt-1 block w-full rounded-2xl border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-950/70 text-sm text-slate-800 dark:text-slate-200 py-2.5 px-3.5 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors cursor-pointer"
                 >
                     <option value="" disabled>Seleccione el rol correspondiente...</option>
-                    <option value="Docente">Docente (Acceso a grupo, pase de lista y credenciales)</option>
-                    <option value="Administrativo">Administrativo (Gestión escolar)</option>
+                    <option value="Secretaria">Secretaria (Gestión escolar)</option>
                     <option value="Operador">Operador (Exclusivo terminal Kiosco / Escáner QR)</option>
                     <option value="Director">Director (Control institucional completo)</option>
-                    <option value="Personal">Personal de Apoyo</option>
                 </select>
 
                 <InputError class="mt-1.5 text-xs" :message="form.errors.tipo_usuario" />

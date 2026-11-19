@@ -18,7 +18,7 @@ class EstadisticasConvocatoriasAmbiguedadTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->admin = User::factory()->create(['role' => 'admin']);
+        $this->admin = User::factory()->create(['role' => 'Secretaria']);
     }
 
     public function test_dos_eventos_el_mismo_dia_sin_evento_id_no_se_atribuyen_a_ninguno(): void
