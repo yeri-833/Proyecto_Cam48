@@ -75,6 +75,43 @@ class NotificacionesPersonalAsincronasTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    public function test_envios_masivos_entregan_una_vez_por_destinatario_y_lote(): void
+    {
+        Queue::fake();
+        $this->freezeTime();
+        config(['telegram.bot_token' => 'TOKEN_SINTETICO']);
+        Http::fake(['https://api.telegram.org/*' => Http::response(['ok' => true])]);
+
+        $director = User::factory()->create(['role' => 'Director']);
+        foreach (['DOC_MASIVO_1' => '900001', 'DOC_MASIVO_2' => '900002'] as $personalId => $chatId) {
+            Personal::create([
+                'id' => $personalId,
+                'nombre_completo' => 'Docente de prueba '.$personalId,
+                'telegram_chat_id' => $chatId,
+                'activo' => true,
+            ]);
+        }
+
+        $telegram = new TelegramService;
+        for ($lote = 0; $lote < 2; $lote++) {
+            $this->actingAs($director)->post(route('personal.mensajeMasivo'), [
+                'mensaje' => 'El mismo aviso de prueba.',
+            ])->assertRedirect()->assertSessionHas('success');
+
+            foreach (Queue::pushed(NotificarAvisoPersonalJob::class)->slice($lote * 2) as $job) {
+                $payload = serialize($job);
+                unserialize($payload)->handle($telegram);
+                unserialize($payload)->handle($telegram);
+            }
+
+            Http::assertSentCount(($lote + 1) * 2);
+        }
+
+        $chats = Http::recorded()->map(fn (array $intercambio): string => (string) $intercambio[0]['chat_id']);
+        $this->assertSame(['900001' => 2, '900002' => 2], $chats->countBy()->sortKeys()->all());
+        $this->assertDatabaseCount('notificaciones_procesadas', 4);
+    }
+
     public function test_job_notificar_aviso_personal_aplica_idempotencia_durable_en_base_de_datos(): void
     {
         $personal = Personal::create([
@@ -85,10 +122,10 @@ class NotificacionesPersonalAsincronasTest extends TestCase
         ]);
 
         $telegramMock = Mockery::mock(TelegramService::class);
-        $telegramMock->shouldReceive('enviarMensajeDirecto')
+        $telegramMock->shouldReceive('enviarMensajeDirectoDetallado')
             ->once()
             ->with('CHAT_104', 'DOCENTE FICTICIO', Mockery::pattern('/Aviso de prueba/'))
-            ->andReturn(true);
+            ->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $idempotencyKey = 'test_key_'.uniqid();
         $job = new NotificarAvisoPersonalJob($personal, 'Aviso de prueba', $idempotencyKey);
@@ -118,10 +155,10 @@ class NotificacionesPersonalAsincronasTest extends TestCase
         ]);
 
         $telegramMock = Mockery::mock(TelegramService::class);
-        $telegramMock->shouldReceive('enviarMensajeDirecto')
+        $telegramMock->shouldReceive('enviarMensajeDirectoDetallado')
             ->once()
             ->with('CHAT_105', 'DOCENTE CON REINTENTO', Mockery::pattern('/Mensaje con fallo inicial/'))
-            ->andReturn(false);
+            ->andReturn(['status' => 'Fallido', 'success' => false]);
 
         $idempotencyKey = 'retry_key_'.uniqid();
         $job = new NotificarAvisoPersonalJob($personal, 'Mensaje con fallo inicial', $idempotencyKey);
@@ -144,10 +181,10 @@ class NotificacionesPersonalAsincronasTest extends TestCase
 
         // En el reintento, el mock tiene éxito y el job concluye
         $telegramMock2 = Mockery::mock(TelegramService::class);
-        $telegramMock2->shouldReceive('enviarMensajeDirecto')
+        $telegramMock2->shouldReceive('enviarMensajeDirectoDetallado')
             ->once()
             ->with('CHAT_105', 'DOCENTE CON REINTENTO', Mockery::pattern('/Mensaje con fallo inicial/'))
-            ->andReturn(true);
+            ->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $job->handle($telegramMock2);
 
@@ -168,10 +205,10 @@ class NotificacionesPersonalAsincronasTest extends TestCase
         ]);
 
         $telegramMock = Mockery::mock(TelegramService::class);
-        $telegramMock->shouldReceive('enviarMensajeDirecto')
+        $telegramMock->shouldReceive('enviarMensajeDirectoDetallado')
             ->once()
             ->with('CHAT_106', 'DOCENTE CONCURRENTE', Mockery::pattern('/Mensaje concurrente/'))
-            ->andReturn(true);
+            ->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $idempotencyKey = 'concurrent_key_'.uniqid();
 
@@ -216,10 +253,10 @@ class NotificacionesPersonalAsincronasTest extends TestCase
         ]);
 
         $telegramMock = Mockery::mock(TelegramService::class);
-        $telegramMock->shouldReceive('enviarMensajeDirecto')
+        $telegramMock->shouldReceive('enviarMensajeDirectoDetallado')
             ->once()
             ->with('CHAT_107', 'DOCENTE ZOMBIE RECOVERY', Mockery::pattern('/Mensaje tras recuperacion/'))
-            ->andReturn(true);
+            ->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $worker = new NotificarAvisoPersonalJob($personal, 'Mensaje tras recuperacion', $idempotencyKey);
         $worker->handle($telegramMock);
@@ -264,6 +301,7 @@ class NotificacionesPersonalAsincronasTest extends TestCase
 
         $this->assertNotNull($registro);
         $this->assertSame('FALLIDO', $registro->estado);
-        $this->assertStringContainsString('Connection refused', $registro->ultimo_error);
+        $this->assertStringContainsString('Agotados los 3 intentos', $registro->ultimo_error);
+        $this->assertStringNotContainsString('Connection refused', $registro->ultimo_error);
     }
 }

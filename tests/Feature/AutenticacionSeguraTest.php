@@ -3,8 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
+use Inertia\Testing\AssertableInertia;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
 class AutenticacionSeguraTest extends TestCase
@@ -146,6 +152,114 @@ class AutenticacionSeguraTest extends TestCase
 
         $this->assertGuest();
         $response->assertSessionHasErrors('email');
+    }
+
+    public function test_recuperacion_utiliza_el_correo_institucional_y_consume_el_token(): void
+    {
+        $email = 'recuperacion@example.test';
+        $user = User::factory()->create(['email' => $email, 'tipo_usuario' => 'Secretario']);
+        $previousRememberToken = $user->getRememberToken();
+        $newPassword = 'clave-sintetica-restablecida-123';
+
+        $this->from(route('password.request'))->post(route('password.email'), ['email' => $email])
+            ->assertRedirect(route('password.request'))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('status', __(Password::RESET_LINK_SENT));
+
+        $notification = Notification::sent($user, ResetPassword::class)->sole();
+        $this->assertSame($email, $user->routeNotificationFor('mail', $notification));
+        $token = $notification->token;
+        $tokenHash = DB::table('password_reset_tokens')->where('email', $email)->value('token');
+        $this->assertIsString($tokenHash);
+        $this->assertNotSame($token, $tokenHash);
+        $this->assertTrue(Hash::check($token, $tokenHash));
+
+        $this->get($notification->toMail($user)->actionUrl)
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Auth/ResetPassword')
+                ->where('email', $email)
+                ->where('token', $token));
+
+        $this->post(route('password.store'), [
+            'email' => $email,
+            'token' => $token,
+            'password' => $newPassword,
+            'password_confirmation' => $newPassword,
+        ])->assertSessionHasNoErrors()->assertRedirect(route('login'));
+
+        $user->refresh();
+        $this->assertTrue(Hash::check($newPassword, $user->password));
+        $this->assertNotSame($previousRememberToken, $user->getRememberToken());
+        $this->assertSame('Secretario', $user->tipo_usuario);
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => $email]);
+        $this->assertGuest();
+
+        $this->post(route('login'), ['email' => $email, 'password' => $newPassword])
+            ->assertRedirect(route('dashboard'));
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_token_de_recuperacion_no_puede_usarse_para_otro_correo(): void
+    {
+        $user = User::factory()->create(['tipo_usuario' => 'Director']);
+        $otherUser = User::factory()->create(['tipo_usuario' => 'Secretaria']);
+        $otherPasswordHash = $otherUser->password;
+        $token = Password::createToken($user);
+
+        $this->post(route('password.store'), [
+            'email' => $otherUser->correo,
+            'token' => $token,
+            'password' => 'clave-sintetica-distinta-456',
+            'password_confirmation' => 'clave-sintetica-distinta-456',
+        ])->assertSessionHasErrors(['email' => __(Password::INVALID_TOKEN)]);
+
+        $this->assertSame($otherPasswordHash, $otherUser->refresh()->password);
+        $this->assertTrue(Password::tokenExists($user, $token));
+        $this->assertGuest();
+    }
+
+    public function test_restablecimiento_rechaza_un_token_que_no_es_texto(): void
+    {
+        $user = User::factory()->create(['tipo_usuario' => 'Secretaria']);
+        $originalPasswordHash = $user->password;
+        $token = Password::createToken($user);
+
+        $this->post(route('password.store'), [
+            'email' => $user->correo,
+            'token' => [$token],
+            'password' => 'clave-sintetica-distinta-456',
+            'password_confirmation' => 'clave-sintetica-distinta-456',
+        ])->assertSessionHasErrors('token');
+
+        $this->assertSame($originalPasswordHash, $user->refresh()->password);
+        $this->assertTrue(Password::tokenExists($user, $token));
+    }
+
+    #[TestWith(['Admin'])]
+    #[TestWith(['Administrador'])]
+    #[TestWith(['Docente'])]
+    #[TestWith(['Personal'])]
+    #[TestWith(['Desconocido'])]
+    public function test_restablecer_contrasena_no_puede_reactivar_un_perfil_retirado(string $role): void
+    {
+        $user = User::factory()->create(['tipo_usuario' => $role]);
+        $email = $user->correo;
+        $newPassword = 'clave-sintetica-perfil-retirado-123';
+
+        $this->post(route('password.store'), [
+            'email' => $email,
+            'token' => Password::createToken($user),
+            'password' => $newPassword,
+            'password_confirmation' => $newPassword,
+            'role' => 'Director',
+            'tipo_usuario' => 'Director',
+        ])->assertSessionHasNoErrors()->assertRedirect(route('login'));
+
+        $this->assertSame($role, $user->refresh()->tipo_usuario);
+        $this->assertGuest();
+        $this->post(route('login'), ['email' => $email, 'password' => $newPassword])->assertForbidden();
+        $this->assertGuest();
     }
 
     /**

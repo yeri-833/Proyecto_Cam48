@@ -71,6 +71,49 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         );
     }
 
+    public function test_eliminar_tutor_preserva_la_convocatoria_asistencia_y_vinculo_familiar(): void
+    {
+        $alumno = Alumno::create(['matricula' => 'TUTOR_HIST_01', 'nombre' => 'Alumno', 'apellido' => 'Sintetico']);
+        $tutor = Tutor::create(['matricula_alumno' => $alumno->matricula, 't1_nombre' => 'Tutor Sintetico']);
+        $evento = Evento::create(['nombre_evento' => 'Junta Sintetica', 'fecha_hora' => '2030-01-01 09:00:00']);
+        $convocatoria = $tutor->convocatorias()->create([
+            'evento_id' => $evento->id,
+            'alumno_matricula' => $alumno->matricula,
+            'notificado' => true,
+            'asistio' => true,
+        ]);
+        $asistencia = RegistroAsistencia::create([
+            'asistible_type' => Tutor::class,
+            'asistible_id' => (string) $tutor->id,
+            'evento_id' => $evento->id,
+            'fecha' => '2030-01-01',
+            'hora' => '09:00:00',
+        ]);
+        $vinculo = ['tutor_id' => $tutor->id, 'alumno_matricula' => $alumno->matricula, 'es_tutor_principal' => true];
+        DB::table('alumno_tutor')->insert($vinculo);
+
+        foreach (['Secretaria' => 403, 'Director' => 409] as $perfil => $status) {
+            $this->actingAs(User::factory()->create(['role' => $perfil]))
+                ->delete(route('tutores.destroy', $tutor->id))->assertStatus($status);
+
+            $this->assertDatabaseHas('tutores', ['id' => $tutor->id, 'deleted_at' => null]);
+            $this->assertDatabaseHas('evento_convocatorias', [
+                'id' => $convocatoria->id,
+                'tutor_id' => $tutor->id,
+                'evento_id' => $evento->id,
+                'notificado' => true,
+                'asistio' => true,
+            ]);
+            $this->assertDatabaseHas('registros_asistencia', [
+                'id' => $asistencia->id,
+                'asistible_type' => Tutor::class,
+                'asistible_id' => (string) $tutor->id,
+                'evento_id' => $evento->id,
+            ]);
+            $this->assertDatabaseHas('alumno_tutor', $vinculo);
+        }
+    }
+
     public function test_exportacion_csv_incluye_columna_de_alumno_relacionado(): void
     {
         $admin = User::factory()->create(['role' => 'Secretaria']);
@@ -916,7 +959,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         ]);
 
         $wsMock = \Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldReceive('enviarMensajeDirecto')->once()->andReturn(true);
+        $wsMock->shouldReceive('enviarMensajeDirectoDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $tgMock = \Mockery::mock(TelegramService::class);
 
@@ -973,7 +1016,7 @@ class TutoresAsistenciaParticipacionTest extends TestCase
         $alumno->setRelation('tutor', $tutor);
 
         $wsMock = \Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+        $wsMock->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $tgMock = \Mockery::mock(TelegramService::class);
 

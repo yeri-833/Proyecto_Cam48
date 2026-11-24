@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use App\Jobs\NotificarAvisoPersonalJob;
 use App\Models\Personal;
 use App\Services\ImageUploadService;
-use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class PersonalController extends Controller
@@ -140,10 +140,11 @@ class PersonalController extends Controller
             ->get();
 
         $enviados = 0;
-        $idempotencyKey = md5('masivo_'.trim($validated['mensaje']).'_'.now()->format('YmdHi'));
+        $loteId = (string) Str::uuid();
 
         foreach ($personalConTelegram as $p) {
             if (! empty($p->telegram_chat_id)) {
+                $idempotencyKey = hash('sha256', "personal:aviso-masivo:{$loteId}:{$p->id}");
                 NotificarAvisoPersonalJob::dispatch($p, $validated['mensaje'], $idempotencyKey);
                 $enviados++;
             }

@@ -106,7 +106,7 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
         ]);
 
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldReceive('enviarMensajeDirecto')->once()->andReturn(true);
+        $tgMock->shouldReceive('enviarMensajeDirectoDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         // Nuevo worker entra a procesar el job
         $job = new NotificarAvisoPersonalJob(
@@ -167,7 +167,7 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
     public function test_job_no_marca_entregado_si_el_proveedor_devuelve_falso(): void
     {
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldReceive('enviarMensajeDirecto')->once()->andReturn(false);
+        $tgMock->shouldReceive('enviarMensajeDirectoDetallado')->once()->andReturn(['status' => 'Fallido', 'success' => false]);
 
         $idempotencyKey = hash('sha256', "aviso_personal:personal:{$this->personal->id}:asunto:Falla:mensaje:NoLlega");
 
@@ -214,7 +214,7 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
         ]);
 
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldNotReceive('enviarMensajeDirecto');
+        $tgMock->shouldNotReceive('enviarMensajeDirectoDetallado');
 
         $key = hash('sha256', 'aviso:sin_canal:'.uniqid());
         $job = new NotificarAvisoPersonalJob($personalSinCanal, 'Mensaje sin canal', $key);
@@ -246,10 +246,10 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
         $alumno->setRelation('tutor', $tutor);
 
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(false);
+        $wsMock->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Fallido', 'success' => false]);
 
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+        $tgMock->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $job = new NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Elena Vega', '2026-11-13');
         try {
@@ -290,10 +290,10 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
 
         // Intento 1: WhatsApp falla, Telegram es aceptado por el proveedor
         $wsMock1 = Mockery::mock(WhatsAppService::class);
-        $wsMock1->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(false);
+        $wsMock1->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Fallido', 'success' => false]);
 
         $tgMock1 = Mockery::mock(TelegramService::class);
-        $tgMock1->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+        $tgMock1->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $job1 = new NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Mateo Sosa', '2026-11-14');
         try {
@@ -308,11 +308,11 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
         // Intento 2 (Reintento de la cola):
         // REGLA FUNDAMENTAL: Telegram ya fue aceptado, por lo tanto NUNCA debe volver a llamarse
         $tgMock2 = Mockery::mock(TelegramService::class);
-        $tgMock2->shouldNotReceive('enviarAvisoAsistencia');
+        $tgMock2->shouldNotReceive('enviarAvisoAsistenciaDetallado');
 
         // WhatsApp falló previamente, por lo que SÍ debe reintentarse
         $wsMock2 = Mockery::mock(WhatsAppService::class);
-        $wsMock2->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+        $wsMock2->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $job2 = new NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Mateo Sosa', '2026-11-14');
         $job2->handle($wsMock2, $tgMock2);
@@ -343,12 +343,12 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
 
         // Intento 1: WhatsApp sufre timeout de red (resultado incierto)
         $wsMock1 = Mockery::mock(WhatsAppService::class);
-        $wsMock1->shouldReceive('enviarAvisoAsistencia')
+        $wsMock1->shouldReceive('enviarAvisoAsistenciaDetallado')
             ->once()
             ->andThrow(new \RuntimeException('cURL error 28: Operation timed out after 5000 milliseconds'));
 
         $tgMock1 = Mockery::mock(TelegramService::class);
-        $tgMock1->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+        $tgMock1->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $job1 = new NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Lucía Méndez', '2026-11-14');
         $job1->handle($wsMock1, $tgMock1);
@@ -361,10 +361,10 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
 
         // Intento 2: Como WhatsApp quedó en INCIERTO (y Telegram ACEPTADO), ningún canal debe ser reenviado
         $wsMock2 = Mockery::mock(WhatsAppService::class);
-        $wsMock2->shouldNotReceive('enviarAvisoAsistencia');
+        $wsMock2->shouldNotReceive('enviarAvisoAsistenciaDetallado');
 
         $tgMock2 = Mockery::mock(TelegramService::class);
-        $tgMock2->shouldNotReceive('enviarAvisoAsistencia');
+        $tgMock2->shouldNotReceive('enviarAvisoAsistenciaDetallado');
 
         $job2 = new NotificarAsistenciaJob($alumno, 'ENTRADA', '08:00 AM', 'Lucía Méndez', '2026-11-14');
         $job2->handle($wsMock2, $tgMock2);
@@ -391,10 +391,10 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
 
         // WhatsApp: ACEPTADO_PROVEEDOR, Telegram: timeout INCIERTO
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+        $wsMock->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldReceive('enviarAvisoAsistencia')
+        $tgMock->shouldReceive('enviarAvisoAsistenciaDetallado')
             ->once()
             ->andThrow(new \RuntimeException('Connection timed out'));
 
@@ -427,12 +427,12 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
         $alumno->setRelation('tutor', $tutor);
 
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldReceive('enviarAvisoAsistencia')
+        $wsMock->shouldReceive('enviarAvisoAsistenciaDetallado')
             ->once()
             ->andThrow(new \RuntimeException('cURL error 28: Operation timed out'));
 
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldReceive('enviarAvisoAsistencia')
+        $tgMock->shouldReceive('enviarAvisoAsistenciaDetallado')
             ->once()
             ->andThrow(new \RuntimeException('Network timeout'));
 
@@ -466,11 +466,11 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
 
         // WhatsApp responde exitosamente
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+        $wsMock->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         // Telegram lanza una excepción fatal que simula muerte del worker
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldReceive('enviarAvisoAsistencia')
+        $tgMock->shouldReceive('enviarAvisoAsistenciaDetallado')
             ->once()
             ->andThrow(new \Error('Interrupción fatal del proceso entre canales'));
 
@@ -491,11 +491,11 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
         // Segundo worker (reintento tras recuperación):
         // REGLA CRÍTICA: WhatsApp NO debe llamarse
         $wsMock2 = Mockery::mock(WhatsAppService::class);
-        $wsMock2->shouldNotReceive('enviarAvisoAsistencia');
+        $wsMock2->shouldNotReceive('enviarAvisoAsistenciaDetallado');
 
         // Telegram ahora sí tiene éxito
         $tgMock2 = Mockery::mock(TelegramService::class);
-        $tgMock2->shouldReceive('enviarAvisoAsistencia')->once()->andReturn(true);
+        $tgMock2->shouldReceive('enviarAvisoAsistenciaDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         // Simular expiración de lease para que el nuevo worker pueda reclamarlo
         DB::table('notificaciones_procesadas')
@@ -515,7 +515,7 @@ class NotificacionesAtomicidadResilienciaTest extends TestCase
     public function test_aviso_personal_con_timeout_en_telegram_marca_estado_global_incierto(): void
     {
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldReceive('enviarMensajeDirecto')
+        $tgMock->shouldReceive('enviarMensajeDirectoDetallado')
             ->once()
             ->andThrow(new \RuntimeException('cURL error 28: Operation timed out'));
 

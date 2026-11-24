@@ -71,7 +71,7 @@ class ConvocatoriasNotificacionesEventosTest extends TestCase
         ]);
 
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldReceive('enviarMensajeDirecto')->once()->andReturn(true);
+        $wsMock->shouldReceive('enviarMensajeDirectoDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $tgMock = Mockery::mock(TelegramService::class);
 
@@ -128,7 +128,7 @@ class ConvocatoriasNotificacionesEventosTest extends TestCase
 
         $wsMock = Mockery::mock(WhatsAppService::class);
         // Simulamos fallo del proveedor (ej. API WhatsApp offline)
-        $wsMock->shouldReceive('enviarMensajeDirecto')->once()->andReturn(false);
+        $wsMock->shouldReceive('enviarMensajeDirectoDetallado')->once()->andReturn(['status' => 'Fallido', 'success' => false]);
 
         $tgMock = Mockery::mock(TelegramService::class);
 
@@ -168,7 +168,7 @@ class ConvocatoriasNotificacionesEventosTest extends TestCase
     public function test_dos_juntas_mismo_dia_tienen_idempotency_keys_independientes(): void
     {
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldReceive('enviarMensajeDirecto')->twice()->andReturn(true);
+        $wsMock->shouldReceive('enviarMensajeDirectoDetallado')->twice()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
 
         $tgMock = Mockery::mock(TelegramService::class);
 
@@ -225,10 +225,10 @@ class ConvocatoriasNotificacionesEventosTest extends TestCase
         ]);
 
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldNotReceive('enviarMensajeDirecto');
+        $wsMock->shouldNotReceive('enviarMensajeDirectoDetallado');
 
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldNotReceive('enviarAvisoEventoDirecto');
+        $tgMock->shouldNotReceive('enviarAvisoEventoDirectoDetallado');
 
         // Despacho sin evento_id (null)
         $job = new NotificarEventoTutorJob(
@@ -273,7 +273,7 @@ class ConvocatoriasNotificacionesEventosTest extends TestCase
         ]);
 
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldReceive('enviarMensajeDirecto')->once()->andReturn(true);
+        $wsMock->shouldReceive('enviarMensajeDirectoDetallado')->once()->andReturn(['status' => 'Enviado a proveedor', 'success' => true]);
         $tgMock = Mockery::mock(TelegramService::class);
 
         $job = new NotificarEventoTutorJob(

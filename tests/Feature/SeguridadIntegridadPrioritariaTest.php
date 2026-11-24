@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\EnsureAuthorizedProfile;
+use App\Jobs\NotificarAsistenciaJob;
 use App\Models\Alumno;
 use App\Models\Evento;
 use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
 use App\Models\User;
+use Illuminate\Database\Connection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -206,6 +208,105 @@ class SeguridadIntegridadPrioritariaTest extends TestCase
             'asistible_type' => Alumno::class, 'asistible_id' => $alumno->matricula, 'evento_id' => null,
         ]);
         $this->assertDatabaseCount('evento_convocatorias', 0);
+    }
+
+    /** @return array<string, array{bool}> */
+    public static function alcanceDeEscaneoRepetido(): array
+    {
+        return ['con evento' => [true], 'sin evento' => [false]];
+    }
+
+    #[DataProvider('alcanceDeEscaneoRepetido')]
+    public function test_dos_kioscos_comparten_deduplicacion_y_cooldown(bool $conEvento): void
+    {
+        $this->freezeTime();
+        $primerKiosco = User::factory()->create(['role' => 'Operador']);
+        $segundoKiosco = User::factory()->create(['role' => 'Operador']);
+        $alumno = Alumno::create(['matricula' => 'SYN-QR-REPETIDO', 'nombre' => 'Alumno', 'apellido' => 'Sintetico', 'activo' => true]);
+        Tutor::create(['t1_nombre' => 'Tutor Sintetico', 'matricula_alumno' => $alumno->matricula]);
+        $evento = Evento::create(['nombre_evento' => 'Evento Sintetico', 'fecha_hora' => now()]);
+        $entrada = [
+            'qr_data' => $this->qr($alumno->matricula, 'Alumno'),
+            'evento_id' => $conEvento ? $evento->id : null,
+        ];
+
+        $nivelesDeLectura = [];
+        DB::connection()->beforeExecuting(static function (string $sql, array $bindings, Connection $connection) use (&$nivelesDeLectura): void {
+            if (str_starts_with(strtolower(ltrim($sql)), 'select') && str_contains($sql, 'registros_asistencia')) {
+                $nivelesDeLectura[] = $connection->transactionLevel();
+            }
+        });
+
+        $this->actingAs($primerKiosco)->postJson(route('asistencia.procesarQr'), $entrada)
+            ->assertOk()->assertJsonPath('status', 'success');
+        $this->actingAs($segundoKiosco)->postJson(route('asistencia.procesarQr'), $entrada)
+            ->assertOk()->assertJsonPath('status', 'warning');
+
+        $this->assertNotEmpty($nivelesDeLectura);
+        $this->assertSame([1], array_values(array_unique($nivelesDeLectura)));
+        $this->assertDatabaseCount('registros_asistencia', 1);
+        Queue::assertPushed(NotificarAsistenciaJob::class, 1);
+
+        $this->travel(5)->minutes();
+        $this->postJson(route('asistencia.procesarQr'), $entrada)
+            ->assertOk()->assertJsonPath('status', $conEvento ? 'warning' : 'success');
+
+        $this->assertDatabaseCount('registros_asistencia', $conEvento ? 1 : 2);
+        Queue::assertPushed(NotificarAsistenciaJob::class, $conEvento ? 1 : 2);
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function perfilesDesbloqueo(): array
+    {
+        return ['director' => ['Director', 'dashboard'], 'operador' => ['Operador', 'logout']];
+    }
+
+    #[DataProvider('perfilesDesbloqueo')]
+    public function test_desbloqueo_tiene_limite_por_cuenta_y_conserva_destino(string $perfil, string $destino): void
+    {
+        $this->freezeTime();
+        $usuario = $this->crearUsuario($perfil);
+        $this->actingAs($usuario);
+        foreach (range(1, 5) as $origen) {
+            $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.'.$origen])
+                ->postJson(route('asistencia.desbloquear'), ['password' => 'ficticia-incorrecta'])
+                ->assertOk()->assertJsonPath('status', 'error');
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.6'])
+            ->postJson(route('asistencia.desbloquear'), ['password' => 'synthetic-password-123'])
+            ->assertTooManyRequests()->assertHeader('Retry-After')->assertJsonPath('status', 'error');
+
+        $this->post(route('logout'))->assertRedirect();
+        $rutaDestino = $perfil === 'Operador' ? 'asistencia.escaner' : 'dashboard';
+        $this->post(route('login'), ['email' => $usuario->email, 'password' => 'synthetic-password-123'])
+            ->assertRedirect(route($rutaDestino));
+        $this->assertAuthenticatedAs($usuario);
+
+        $this->travel(61)->seconds();
+        $this->postJson(route('asistencia.desbloquear'), ['password' => 'synthetic-password-123'])
+            ->assertOk()->assertExactJson(['status' => 'success', 'destination' => $destino]);
+    }
+
+    public function test_desbloqueo_limita_intentos_del_mismo_origen_entre_cuentas(): void
+    {
+        $this->freezeTime();
+        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.10']);
+        foreach (range(1, 4) as $cuenta) {
+            $usuario = User::factory()->create(['role' => 'Operador', 'email' => 'kiosco-'.$cuenta.'@example.test']);
+            $this->actingAs($usuario);
+            foreach (range(1, 5) as $intento) {
+                $this->postJson(route('asistencia.desbloquear'), ['password' => []])
+                    ->assertOk()->assertJsonPath('status', 'error');
+            }
+        }
+
+        $usuario = $this->crearUsuario('Operador');
+        $this->actingAs($usuario)->postJson(route('asistencia.desbloquear'), ['password' => 'synthetic-password-123'])
+            ->assertTooManyRequests()->assertHeader('Retry-After');
+        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.11'])
+            ->postJson(route('asistencia.desbloquear'), ['password' => 'synthetic-password-123'])
+            ->assertOk()->assertJsonPath('destination', 'logout');
     }
 
     /** @return array<string, array{string, int}> */

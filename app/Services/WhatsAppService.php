@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Jobs\NotificarEventoTutorJob;
 use App\Models\Tutor;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class WhatsAppService
 {
@@ -25,29 +27,19 @@ class WhatsAppService
     }
 
     /**
-     * Enmascara el número telefónico para salvaguardar la privacidad en logs operativos (OWASP A03).
-     */
-    private function maskPhone(string $phone): string
-    {
-        $clean = preg_replace('/[^0-9]/', '', $phone) ?? '';
-        $len = strlen($clean);
-        if ($len <= 4) {
-            return '****';
-        }
-
-        return substr($clean, 0, 3).'****'.substr($clean, -2);
-    }
-
-    /**
      * Envía una notificación de asistencia al tutor del alumno.
      */
     public function enviarAvisoAsistencia(string $telefono, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): bool
     {
-        if (empty($telefono)) {
-            return false;
-        }
+        return $this->enviarAvisoAsistenciaDetallado($telefono, $nombreAlumno, $hora, $tipo)['success'];
+    }
 
-        $telefonoLimpio = preg_replace('/[^0-9]/', '', $telefono) ?? '';
+    /** @return array{status: string, success: bool} */
+    public function enviarAvisoAsistenciaDetallado(string $telefono, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): array
+    {
+        if (empty($telefono)) {
+            return ['status' => 'Fallido', 'success' => false];
+        }
 
         $mensaje = "🏫 *CAM #48 - Sistema de Accesos*\n\n"
                  ."Le informamos que el alumno(a) *{$nombreAlumno}* ha registrado su asistencia.\n\n"
@@ -55,7 +47,7 @@ class WhatsAppService
                  ."📌 Tipo: {$tipo}\n\n"
                  .'_Este es un mensaje automático, por favor no responda._';
 
-        return $this->enviarMensajeDirecto($telefonoLimpio, $mensaje);
+        return $this->enviarMensajeDirectoDetallado($telefono, $mensaje);
     }
 
     /**
@@ -64,9 +56,7 @@ class WhatsAppService
     public function enviarAvisoEvento(string $nombreEvento, string $fecha, ?string $ubicacion, ?int $eventoId = null): bool
     {
         if ($eventoId === null || $eventoId <= 0) {
-            Log::warning('[WhatsApp] Despacho de aviso de evento abortado: falta eventoId explícito.', [
-                'nombre_evento' => $nombreEvento,
-            ]);
+            Log::warning('[WhatsApp] Despacho de aviso de evento abortado: falta eventoId explícito.');
 
             return false;
         }
@@ -95,17 +85,13 @@ class WhatsAppService
     }
 
     /**
-     * Envía mensaje con reporte estructurado de estado operativo y enmascaramiento de datos personales.
-     *
      * @return array{status: string, success: bool}
      */
     public function enviarMensajeDirectoDetallado(string $telefonoDestino, string $mensaje): array
     {
         $telefonoLimpio = preg_replace('/[^0-9]/', '', $telefonoDestino) ?? '';
-        $telefonoEnmascarado = $this->maskPhone($telefonoLimpio);
-
         if ($this->modoSimulacion) {
-            Log::info("[WhatsApp] [SIMULADO] Mensaje preparado para destinatario: {$telefonoEnmascarado}. Longitud: ".strlen($mensaje).' caracteres.');
+            Log::info('[WhatsApp] Envío simulado.');
 
             return [
                 'status' => 'Simulado',
@@ -120,29 +106,30 @@ class WhatsAppService
                 'body' => $mensaje,
             ]);
 
-            if ($response->successful()) {
-                Log::info("[WhatsApp] [ENVIADO_PROVEEDOR] Mensaje entregado exitosamente a {$telefonoEnmascarado}");
+            $rechazado = in_array($response->json('sent'), [false, 'false'], true)
+                || in_array($response->json('success'), [false, 'false'], true);
+            if ($response->successful() && ! $rechazado) {
+                Log::info('[WhatsApp] Envío aceptado por el proveedor.');
 
-                return [
-                    'status' => 'Enviado a proveedor',
-                    'success' => true,
-                ];
-            } else {
-                Log::error("[WhatsApp] [FALLIDO] Error devuelto por proveedor para {$telefonoEnmascarado} (HTTP {$response->status()})");
-
-                return [
-                    'status' => 'Fallido',
-                    'success' => false,
-                ];
+                return ['status' => 'Enviado a proveedor', 'success' => true];
             }
-        } catch (\Exception $e) {
-            Log::error("[WhatsApp] [FALLIDO] Excepción de conexión: {$e->getMessage()}");
 
-            return [
-                'status' => 'Fallido',
-                'success' => false,
-            ];
+            if (($response->clientError() && $response->status() !== 408) || ($response->successful() && $rechazado)) {
+                Log::error('[WhatsApp] Envío rechazado.', ['http_status' => $response->status()]);
+
+                return ['status' => 'Fallido', 'success' => false];
+            }
+
+            Log::warning('[WhatsApp] Respuesta sin confirmación de envío.', ['http_status' => $response->status()]);
+        } catch (ConnectionException) {
+            Log::warning('[WhatsApp] Conexión interrumpida, resultado del envío incierto.');
+        } catch (Throwable $exception) {
+            Log::error('[WhatsApp] No fue posible completar el envío.', ['exception_type' => $exception::class]);
+
+            return ['status' => 'Fallido', 'success' => false];
         }
+
+        return ['status' => 'Incierto', 'success' => false];
     }
 
     /**

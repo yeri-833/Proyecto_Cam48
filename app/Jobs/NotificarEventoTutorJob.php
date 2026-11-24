@@ -68,10 +68,7 @@ class NotificarEventoTutorJob implements ShouldQueue
     {
         // Requisito estricto: si falta el identificador explícito del evento, detener de forma segura.
         if ($this->eventoId === null || $this->eventoId <= 0) {
-            Log::warning('[NotificarEventoTutorJob] Deteniendo ejecución de forma segura: falta eventoId explícito.', [
-                'tutor_id' => $this->tutor->id ?? null,
-                'nombre_evento' => $this->nombreEvento,
-            ]);
+            Log::warning('[NotificarEventoTutorJob] Falta el identificador del evento.');
 
             return;
         }
@@ -90,7 +87,7 @@ class NotificarEventoTutorJob implements ShouldQueue
         }
 
         if ($estadoLease === 'ALREADY_COMPLETED') {
-            Log::info("[NotificarEventoTutorJob] Notificación ya procesada para tutor {$this->tutor->id} en evento {$this->eventoId}, omitiendo duplicado.");
+            Log::info('[NotificarEventoTutorJob] Notificación de evento ya procesada.');
 
             return;
         }
@@ -117,24 +114,18 @@ class NotificarEventoTutorJob implements ShouldQueue
             if ($tieneTelefono) {
                 $canalesConfigurados++;
                 if ($this->debeProcesarCanal('whatsapp')) {
-                    try {
-                        $resWs = $whatsappService->enviarMensajeDirecto($telefonoLimpio, $this->mensajeWhatsapp);
-                        if ($resWs) {
-                            $this->registrarYPersistirCanal('whatsapp', self::CANAL_ACEPTADO);
-                        } else {
-                            $this->registrarYPersistirCanal('whatsapp', self::CANAL_FALLIDO, 'WhatsApp: proveedor rechazó el envío');
-                            $erroresCanales[] = 'WhatsApp: proveedor rechazó el envío';
-                        }
-                    } catch (\Throwable $eWs) {
-                        $estadoWs = $this->esErrorIncierto($eWs->getMessage()) ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
-                        $this->registrarYPersistirCanal('whatsapp', $estadoWs, $eWs->getMessage());
-                        $erroresCanales[] = 'WhatsApp: '.$eWs->getMessage();
+                    $error = $this->procesarCanalProveedor(
+                        'WhatsApp',
+                        fn (): array => $whatsappService->enviarMensajeDirectoDetallado($telefonoLimpio, $this->mensajeWhatsapp),
+                    );
+                    if ($error !== null) {
+                        $erroresCanales[] = $error;
                     }
                 }
+            } elseif ($this->debeProcesarCanal('whatsapp')) {
+                $this->registrarYPersistirCanal('whatsapp', self::CANAL_NO_CONFIGURADO);
             } else {
-                if (! $this->isCanalAceptado('whatsapp')) {
-                    $this->registrarYPersistirCanal('whatsapp', self::CANAL_NO_CONFIGURADO);
-                }
+                $canalesConfigurados++;
             }
 
             // 2. Telegram (si el tutor tiene Chat ID registrado)
@@ -142,29 +133,23 @@ class NotificarEventoTutorJob implements ShouldQueue
             if ($tieneTelegram) {
                 $canalesConfigurados++;
                 if ($this->debeProcesarCanal('telegram')) {
-                    try {
-                        $resTg = $telegramService->enviarAvisoEventoDirecto(
+                    $error = $this->procesarCanalProveedor(
+                        'Telegram',
+                        fn (): array => $telegramService->enviarAvisoEventoDirectoDetallado(
                             $this->tutor->t1_telegram_chat_id,
                             $this->nombreEvento,
                             $this->fecha,
                             $this->ubicacion
-                        );
-                        if ($resTg) {
-                            $this->registrarYPersistirCanal('telegram', self::CANAL_ACEPTADO);
-                        } else {
-                            $this->registrarYPersistirCanal('telegram', self::CANAL_FALLIDO, 'Telegram: proveedor rechazó el envío');
-                            $erroresCanales[] = 'Telegram: proveedor rechazó el envío';
-                        }
-                    } catch (\Throwable $eTg) {
-                        $estadoTg = $this->esErrorIncierto($eTg->getMessage()) ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
-                        $this->registrarYPersistirCanal('telegram', $estadoTg, $eTg->getMessage());
-                        $erroresCanales[] = 'Telegram: '.$eTg->getMessage();
+                        ),
+                    );
+                    if ($error !== null) {
+                        $erroresCanales[] = $error;
                     }
                 }
+            } elseif ($this->debeProcesarCanal('telegram')) {
+                $this->registrarYPersistirCanal('telegram', self::CANAL_NO_CONFIGURADO);
             } else {
-                if (! $this->isCanalAceptado('telegram')) {
-                    $this->registrarYPersistirCanal('telegram', self::CANAL_NO_CONFIGURADO);
-                }
+                $canalesConfigurados++;
             }
 
             // 3. Email
@@ -178,15 +163,16 @@ class NotificarEventoTutorJob implements ShouldQueue
                         $this->registrarYPersistirCanal('email', self::CANAL_ACEPTADO);
                     } catch (\Throwable $eMail) {
                         $estadoMail = $this->esErrorIncierto($eMail->getMessage()) ? self::CANAL_INCIERTO : self::CANAL_FALLIDO;
-                        $this->registrarYPersistirCanal('email', $estadoMail, $eMail->getMessage());
-                        $erroresCanales[] = 'Email: '.$eMail->getMessage();
-                        Log::error('[Mail] [FALLIDO] Error al enviar correo de evento: '.$eMail->getMessage());
+                        $error = $estadoMail === self::CANAL_INCIERTO ? 'Email: resultado incierto del envío.' : 'Email: envío fallido.';
+                        $this->registrarYPersistirCanal('email', $estadoMail, $error);
+                        $erroresCanales[] = $error;
+                        Log::error('[Mail] Error al enviar correo de evento.', ['exception_type' => $eMail::class]);
                     }
                 }
+            } elseif ($this->debeProcesarCanal('email')) {
+                $this->registrarYPersistirCanal('email', self::CANAL_NO_CONFIGURADO);
             } else {
-                if (! $this->isCanalAceptado('email')) {
-                    $this->registrarYPersistirCanal('email', self::CANAL_NO_CONFIGURADO);
-                }
+                $canalesConfigurados++;
             }
 
             // Si no había ningún canal configurado
@@ -201,13 +187,13 @@ class NotificarEventoTutorJob implements ShouldQueue
                 return;
             }
 
-            $wsAceptado = $tieneTelefono && $this->isCanalAceptado('whatsapp');
-            $tgAceptado = $tieneTelegram && $this->isCanalAceptado('telegram');
-            $emAceptado = $tieneEmail && $this->isCanalAceptado('email');
+            $wsAceptado = $this->isCanalAceptado('whatsapp');
+            $tgAceptado = $this->isCanalAceptado('telegram');
+            $emAceptado = $this->isCanalAceptado('email');
 
-            $wsIncierto = $tieneTelefono && $this->isCanalIncierto('whatsapp');
-            $tgIncierto = $tieneTelegram && $this->isCanalIncierto('telegram');
-            $emIncierto = $tieneEmail && $this->isCanalIncierto('email');
+            $wsIncierto = $this->isCanalIncierto('whatsapp');
+            $tgIncierto = $this->isCanalIncierto('telegram');
+            $emIncierto = $this->isCanalIncierto('email');
 
             $wsFallido = $tieneTelefono && $this->getEstadoCanal('whatsapp') === self::CANAL_FALLIDO;
             $tgFallido = $tieneTelegram && $this->getEstadoCanal('telegram') === self::CANAL_FALLIDO;
@@ -227,6 +213,12 @@ class NotificarEventoTutorJob implements ShouldQueue
                     ->update(['notificado' => true, 'updated_at' => now()]);
             }
 
+            if ($inciertos > 0 && ! $this->tienePersistenciaPorCanal()) {
+                $this->completeNotificationLease(self::ESTADO_INCIERTO, [], $ultimoError, $aceptados > 0);
+
+                return;
+            }
+
             // 1. Éxito total: todos los canales configurados fueron aceptados
             if ($aceptados === $canalesConfigurados) {
                 $this->completeNotificationLease(self::ESTADO_ACEPTADO_PROVEEDOR, [], null, true);
@@ -238,7 +230,7 @@ class NotificarEventoTutorJob implements ShouldQueue
             if ($aceptados > 0) {
                 if ($fallidos > 0) {
                     $this->saveInterimLeaseState(self::ESTADO_PARCIAL, $ultimoError);
-                    throw new RuntimeException("Entrega parcial en evento {$this->eventoId} para tutor {$this->tutor->id}: {$ultimoError}");
+                    throw new RuntimeException('Entrega parcial de aviso de evento.');
                 }
 
                 // Sin fallidos pero con canales inciertos: estado global PARCIAL (nunca ACEPTADO_PROVEEDOR)
@@ -258,13 +250,10 @@ class NotificarEventoTutorJob implements ShouldQueue
             if ($fallidos > 0) {
                 $estadoInterim = ($inciertos > 0) ? self::ESTADO_PARCIAL : self::ESTADO_FALLIDO;
                 $this->saveInterimLeaseState($estadoInterim, $ultimoError);
-                throw new RuntimeException("Fallo de entrega en todos los canales disponibles: {$ultimoError}");
+                throw new RuntimeException('Quedan canales fallidos para el aviso de evento.');
             }
         } catch (\Throwable $e) {
-            Log::error('Error en NotificarEventoTutorJob: '.$e->getMessage(), [
-                'tutor_id' => $this->tutor->id ?? null,
-                'evento_id' => $this->eventoId,
-            ]);
+            Log::error('[NotificarEventoTutorJob] Fallo de procesamiento.', ['exception_type' => $e::class]);
 
             throw $e;
         }
@@ -281,6 +270,6 @@ class NotificarEventoTutorJob implements ShouldQueue
 
         $this->handleTerminalFailure($this->resolverIdempotencyKey(), $exception, $this->tries);
 
-        Log::error("[NotificarEventoTutorJob] Fallo terminal al notificar evento {$this->eventoId} a tutor {$this->tutor->id}: ".($exception ? $exception->getMessage() : 'Error desconocido'));
+        Log::error('[NotificarEventoTutorJob] Se agotaron los intentos del trabajo.');
     }
 }

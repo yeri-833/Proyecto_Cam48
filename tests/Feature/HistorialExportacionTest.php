@@ -8,6 +8,7 @@ use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -135,12 +136,75 @@ class HistorialExportacionTest extends TestCase
             'busqueda por matricula alumno' => ['MAT_SRCH_99', 'MAT_SRCH_99', true],
             'busqueda por nombre alumno' => ['Sebastián', 'Sebastián Montiel', true],
             'busqueda por apellido alumno' => ['Montiel', 'Sebastián Montiel', true],
-            'busqueda por id personal' => ['DOC_SRCH_88', 'DOC_SRCH_88', true],
-            'busqueda por nombre personal' => ['Patricia', 'Patricia Velázquez', true],
+            'busqueda por id personal restringida' => ['DOC_SRCH_88', 'DOC_SRCH_88', false],
+            'busqueda por nombre personal restringida' => ['Patricia', 'Patricia Velázquez', false],
             'busqueda por nombre tutor' => ['Fernanda', 'Fernanda Montiel', true],
-            'busqueda por subcadena parcial' => ['Veláz', 'Patricia Velázquez', true],
+            'busqueda por subcadena de personal restringida' => ['Veláz', 'Patricia Velázquez', false],
             'busqueda sin coincidencias' => ['INEXISTENTE_XYZ', 'Sebastián Montiel', false],
         ];
+    }
+
+    #[DataProvider('alcanceHistorial')]
+    public function test_historial_y_csv_respetan_alcance_de_personal(string $perfil, array $filtros, array $roles, int $totalPersonal): void
+    {
+        $usuario = User::factory()->create(['role' => $perfil]);
+        $fecha = '2030-01-01';
+        $alumno = Alumno::create(['matricula' => 'HIST_ALUMNO_01', 'nombre' => 'Alumno', 'apellido' => 'Sintetico']);
+        $tutor = Tutor::create(['matricula_alumno' => $alumno->matricula, 't1_nombre' => 'Tutor Sintetico']);
+        $personal = Personal::create(['id' => 'HIST_PERSONAL_01', 'nombre_completo' => 'Persona Reservada']);
+
+        foreach ([
+            [Alumno::class, $alumno->matricula, '09:00:00'],
+            [Tutor::class, (string) $tutor->id, '08:30:00'],
+            [Personal::class, $personal->id, '08:00:00'],
+        ] as [$tipo, $id, $hora]) {
+            RegistroAsistencia::create(['asistible_type' => $tipo, 'asistible_id' => $id, 'fecha' => $fecha, 'hora' => $hora]);
+        }
+
+        $this->actingAs($usuario);
+        $parametros = ['fecha' => $fecha, ...$filtros];
+        $nombres = ['Alumno' => 'Alumno Sintetico', 'Tutor' => 'Tutor Sintetico', 'Personal' => 'Persona Reservada'];
+        $nombresEsperados = array_map(fn (string $rol): string => $nombres[$rol], $roles);
+
+        $this->get(route('historial.index', $parametros))->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Asistencia/Historial')
+            ->where('registros.total', count($roles))
+            ->where('registros.data', fn (Collection $registros): bool => $registros->pluck('rol')->all() === $roles
+                && $registros->pluck('nombre_completo')->all() === $nombresEsperados)
+            ->where('estadisticas.total', 2 + $totalPersonal)
+            ->where('estadisticas.Personal', $totalPersonal)
+            ->where('estadisticas.Alumno', 1)
+            ->where('estadisticas.Tutor', 1)
+        );
+
+        $csv = $this->get(route('historial.exportar', $parametros))->assertOk()->streamedContent();
+        foreach ($nombres as $nombre) {
+            $this->assertSame(in_array($nombre, $nombresEsperados, true), str_contains($csv, $nombre));
+        }
+        $this->assertSame(in_array('Personal', $roles, true), str_contains($csv, 'HIST_PERSONAL_01'));
+    }
+
+    /** @return array<string, array{string, array<string, string>, list<string>, int}> */
+    public static function alcanceHistorial(): array
+    {
+        return [
+            'director consulta todos' => ['Director', ['rol' => 'Todos'], ['Alumno', 'Tutor', 'Personal'], 1],
+            'directivo consulta personal' => ['Directivo', ['rol' => 'Personal', 'busqueda' => 'Reservada'], ['Personal'], 1],
+            'secretaria consulta todos' => ['Secretaria', ['rol' => 'Todos'], ['Alumno', 'Tutor'], 0],
+            'secretaria limpia la búsqueda' => ['Secretaria', ['rol' => 'Todos', 'busqueda' => ''], ['Alumno', 'Tutor'], 0],
+            'secretario solicita personal' => ['Secretario', ['rol' => 'Personal', 'role' => 'Director'], [], 0],
+            'secretaria busca personal' => ['Secretaria', ['busqueda' => 'Reservada'], [], 0],
+            'secretaria envia filtros manipulados' => ['Secretaria', ['rol' => 'Invalido', 'busqueda' => '%'], ['Alumno', 'Tutor'], 0],
+        ];
+    }
+
+    public function test_historial_y_csv_rechazan_un_filtro_de_rol_no_escalar(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'Secretaria']));
+
+        foreach (['historial.index', 'historial.exportar'] as $ruta) {
+            $this->getJson(route($ruta, ['rol' => ['Personal', 'Todos']]))->assertUnprocessable();
+        }
     }
 
     /**

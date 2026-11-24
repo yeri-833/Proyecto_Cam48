@@ -56,18 +56,13 @@ class NotificarAvisoPersonalJob implements ShouldQueue
         }
 
         if ($estadoLease === 'ALREADY_COMPLETED') {
-            Log::info('[NotificarAvisoPersonalJob] Notificación omitida por duplicado ya procesado (persistencia DB).', [
-                'personal_id' => $this->personal->id,
-                'key' => $this->idempotencyKey,
-            ]);
+            Log::info('[NotificarAvisoPersonalJob] Notificación de personal ya procesada.');
 
             return;
         }
 
         if ($estadoLease === 'LOCKED_BY_OTHER') {
-            Log::info('[NotificarAvisoPersonalJob] Procesamiento concurrente activo en DB, liberando trabajo.', [
-                'personal_id' => $this->personal->id,
-            ]);
+            Log::info('[NotificarAvisoPersonalJob] Procesamiento concurrente activo, liberando trabajo.');
             if ($this->job !== null) {
                 $this->release(10);
             }
@@ -75,7 +70,14 @@ class NotificarAvisoPersonalJob implements ShouldQueue
             return;
         }
 
-        // Si el personal no tiene Chat ID configurado, registrar SIN_CANAL_DISPONIBLE
+        if (! $this->debeProcesarCanal('telegram')) {
+            $estadoCanal = $this->getEstadoCanal('telegram');
+            $estadoNotif = $estadoCanal === self::CANAL_INCIERTO ? self::ESTADO_INCIERTO : self::ESTADO_ACEPTADO_PROVEEDOR;
+            $this->completeNotificationLease($estadoNotif, [], null, $estadoNotif === self::ESTADO_ACEPTADO_PROVEEDOR);
+
+            return;
+        }
+
         if (empty($this->personal->telegram_chat_id)) {
             $this->registrarYPersistirCanal('telegram', self::CANAL_NO_CONFIGURADO);
             $this->completeNotificationLease(
@@ -85,81 +87,33 @@ class NotificarAvisoPersonalJob implements ShouldQueue
                 false
             );
 
-            Log::info('[NotificarAvisoPersonalJob] Sin canal disponible para notificar al personal.', [
-                'personal_id' => $this->personal->id,
-            ]);
+            Log::info('[NotificarAvisoPersonalJob] Sin canal disponible para notificar al personal.');
 
             return;
         }
 
-        if (! $this->debeProcesarCanal('telegram')) {
-            $estadoCanal = $this->getEstadoCanal('telegram');
-            $estadoNotif = ($estadoCanal === self::CANAL_INCIERTO) ? self::ESTADO_INCIERTO : self::ESTADO_ACEPTADO_PROVEEDOR;
-            $this->completeNotificationLease($estadoNotif, [], 'Canal previamente procesado o en incertidumbre', ($estadoNotif === self::ESTADO_ACEPTADO_PROVEEDOR));
-
-            Log::info('[NotificarAvisoPersonalJob] Canal telegram ya previamente procesado o en incertidumbre, omitiendo envío.', [
-                'personal_id' => $this->personal->id,
-                'estado_canal' => $estadoCanal,
-            ]);
-
-            return;
-        }
-
-        try {
-            $exito = $telegramService->enviarMensajeDirecto(
+        $error = $this->procesarCanalProveedor(
+            'Telegram',
+            fn (): array => $telegramService->enviarMensajeDirectoDetallado(
                 $this->personal->telegram_chat_id,
                 $this->personal->nombre_completo,
                 "📢 *Aviso Institucional (Personal)*\n\n".$this->mensaje
-            );
+            ),
+        );
 
-            if (! $exito) {
-                $this->registrarYPersistirCanal('telegram', self::CANAL_FALLIDO, 'Fallo en transporte Telegram');
-                $this->saveInterimLeaseState(self::ESTADO_FALLIDO, 'Fallo en transporte Telegram');
+        if ($this->getEstadoCanal('telegram') === self::CANAL_FALLIDO) {
+            $this->saveInterimLeaseState(self::ESTADO_FALLIDO, $error);
 
-                Log::warning('[NotificarAvisoPersonalJob] Reintentando envío de aviso a personal.', [
-                    'personal_id' => $this->personal->id,
-                    'intento' => $this->attempts(),
-                ]);
-
-                throw new RuntimeException("Fallo temporal al enviar aviso a personal {$this->personal->id}");
-            }
-
-            $this->registrarYPersistirCanal('telegram', self::CANAL_ACEPTADO);
-            $this->completeNotificationLease(
-                self::ESTADO_ACEPTADO_PROVEEDOR,
-                [],
-                null,
-                true
-            );
-
-            Log::info('[NotificarAvisoPersonalJob] Aviso aceptado por el proveedor Telegram.', [
-                'personal_id' => $this->personal->id,
-            ]);
-        } catch (\Throwable $e) {
-            $esIncierto = $this->esErrorIncierto($e->getMessage());
-            if ($esIncierto) {
-                $this->registrarYPersistirCanal('telegram', self::CANAL_INCIERTO, $e->getMessage());
-                $this->completeNotificationLease(
-                    self::ESTADO_INCIERTO,
-                    [],
-                    'Resultado incierto por timeout de transporte: '.$e->getMessage(),
-                    false
-                );
-
-                Log::warning('[NotificarAvisoPersonalJob] Notificación de personal marcada como INCIERTO tras timeout de red.', [
-                    'personal_id' => $this->personal->id,
-                    'key' => $this->idempotencyKey,
-                    'error' => $e->getMessage(),
-                ]);
-
-                return;
-            }
-
-            $this->registrarYPersistirCanal('telegram', self::CANAL_FALLIDO, $e->getMessage());
-            $this->saveInterimLeaseState(self::ESTADO_FALLIDO, $e->getMessage());
-
-            throw $e;
+            throw new RuntimeException('Fallo al enviar aviso al personal.');
         }
+
+        $aceptado = $this->isCanalAceptado('telegram');
+        $this->completeNotificationLease(
+            $aceptado ? self::ESTADO_ACEPTADO_PROVEEDOR : self::ESTADO_INCIERTO,
+            [],
+            $error,
+            $aceptado,
+        );
     }
 
     /**
@@ -169,10 +123,6 @@ class NotificarAvisoPersonalJob implements ShouldQueue
     {
         $this->handleTerminalFailure($this->idempotencyKey, $e, $this->tries);
 
-        Log::error('[NotificarAvisoPersonalJob] Notificación de personal fallida tras agotar reintentos.', [
-            'personal_id' => $this->personal->id,
-            'key' => $this->idempotencyKey,
-            'error' => $e ? $e->getMessage() : null,
-        ]);
+        Log::error('[NotificarAvisoPersonalJob] Se agotaron los intentos del trabajo.');
     }
 }

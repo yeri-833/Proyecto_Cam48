@@ -9,20 +9,28 @@
  */
 
 require_once __DIR__.'/../../vendor/autoload.php';
-$app = require_once __DIR__.'/../../bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
-$kernel->bootstrap();
 
+use App\Http\Controllers\AsistenciaController;
 use App\Jobs\NotificarAsistenciaJob;
 use App\Jobs\NotificarAvisoPersonalJob;
 use App\Models\Alumno;
+use App\Models\Evento;
 use App\Models\Personal;
+use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
+use App\Models\User;
 use App\Services\TelegramService;
 use App\Services\WhatsAppService;
 use Carbon\Carbon;
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
+use Symfony\Component\Process\Process;
 use Tests\Isolation\DestructiveTestGuard;
 
 $host = '127.0.0.1';
@@ -30,6 +38,15 @@ $port = 3307;
 $user = 'root';
 $pass = '';
 $dbName = 'familylock_concurrency_test';
+
+if (getenv('FAMILYLOCK_TEST_BYPASS_SANDBOX_CHECK') === '1') {
+    throw new RuntimeException('La prueba de concurrencia requiere la comprobación de Windows Sandbox.');
+}
+DestructiveTestGuard::guardDatabaseOperation($host, $port, $dbName, $argv ?? []);
+
+$app = require_once __DIR__.'/../../bootstrap/app.php';
+$kernel = $app->make(Kernel::class);
+$kernel->bootstrap();
 
 Config::set('database.connections.mariadb_conc', [
     'driver' => 'mariadb',
@@ -43,6 +60,39 @@ Config::set('database.connections.mariadb_conc', [
     'prefix' => '',
     'strict' => true,
 ]);
+
+if (($argv[1] ?? '') === '--child-qr') {
+    DB::setDefaultConnection('mariadb_conc');
+    Config::set('app.key', 'synthetic-qr-concurrency-key');
+    Carbon::setTestNow(Carbon::parse('2030-01-01 10:00:00'));
+    Queue::fake();
+    Auth::setUser(new User(['tipo_usuario' => 'Operador']));
+
+    DB::connection()->beforeExecuting(static function (string $sql): void {
+        if (str_contains($sql, '`alumnos`') && str_contains(strtolower($sql), 'for update')) {
+            echo "QR_READY\n";
+            flush();
+        }
+    });
+
+    $id = $argv[2];
+    $request = Request::create('/escaner/procesar', 'POST', [
+        'evento_id' => $argv[3] === '' ? null : $argv[3],
+        'qr_data' => json_encode([
+            'id' => $id,
+            'rol' => 'Alumno',
+            'signature' => hash_hmac('sha256', $id.'Alumno', config('app.key')),
+        ], JSON_THROW_ON_ERROR),
+    ], server: ['HTTP_ACCEPT' => 'application/json']);
+
+    $respuesta = $app->make(AsistenciaController::class)->procesarQr($request);
+    echo 'QR_RESULT '.json_encode([
+        'status' => $respuesta->getData(true)['status'],
+        'jobs' => Queue::pushed(NotificarAsistenciaJob::class)->count(),
+    ], JSON_THROW_ON_ERROR)."\n";
+
+    exit(0);
+}
 
 // Modo hijo: ejecuta un worker independiente sincronizado por barrera temporal
 if (($argv[1] ?? '') === '--child-worker') {
@@ -75,12 +125,12 @@ if (($argv[1] ?? '') === '--child-worker') {
             private int $sleepMs
         ) {}
 
-        public function enviarMensajeDirecto(string|int $chatId, string $nombrePersonal, string $mensaje): bool
+        public function enviarMensajeDirectoDetallado(string|int $chatId, string $nombreTutor, string $mensajeTexto): array
         {
             usleep($this->sleepMs * 1000);
             file_put_contents($this->logFile, $this->workerId."\n", FILE_APPEND | LOCK_EX);
 
-            return true;
+            return ['status' => 'Enviado a proveedor', 'success' => true];
         }
     };
 
@@ -93,9 +143,6 @@ if (($argv[1] ?? '') === '--child-worker') {
 // ─────────────────────────────────────────────────────────────
 // MODO COORDINADOR
 // ─────────────────────────────────────────────────────────────
-$cliArgs = $argv ?? [];
-DestructiveTestGuard::guardDatabaseOperation($host, $port, $dbName, $cliArgs);
-
 $pdo = new PDO("mysql:host={$host};port={$port};charset=utf8mb4", $user, $pass, [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -109,7 +156,7 @@ DB::purge('mariadb_conc');
 DB::setDefaultConnection('mariadb_conc');
 
 // Aplicar migraciones reales de personal y notificaciones_procesadas
-$pdo->exec("
+$pdo->exec('
     CREATE TABLE personal (
         id VARCHAR(50) PRIMARY KEY,
         nombre_completo VARCHAR(150) NOT NULL,
@@ -138,7 +185,7 @@ $pdo->exec("
         created_at TIMESTAMP NULL,
         updated_at TIMESTAMP NULL
     ) ENGINE=InnoDB;
-");
+');
 
 foreach ([
     '2026_11_07_000001_create_notificaciones_procesadas_table.php',
@@ -179,6 +226,7 @@ function spawnWorkerProcess(string $workerId, string $key, string $barrierFile, 
         $barrierFile,
         $sendLogFile,
         (string) $sleepMs,
+        DestructiveTestGuard::CLI_AUTHORIZATION_FLAG,
     ];
 
     $descriptors = [
@@ -293,7 +341,7 @@ $resComplete = $methodComplete->invoke($jobObsoleto, 'ACEPTADO_PROVEEDOR', ['tel
 assertConc($resComplete === false, 'Worker con token obsoleto no pudo completar el registro de otro worker', $assertions);
 
 // Intentar ejecutar failed() con token obsoleto
-$jobObsoleto->failed(new \RuntimeException('Fallo tardío de worker obsoleto'));
+$jobObsoleto->failed(new RuntimeException('Fallo tardío de worker obsoleto'));
 $row2PostFailed = DB::table('notificaciones_procesadas')->where('idempotency_key', $key2)->first();
 assertConc($row2PostFailed->estado === 'EN_PROCESO' && $row2PostFailed->owner_token === $tokenActivo, 'failed() con token obsoleto NO sobreescribió el lease activo de otro proceso', $assertions);
 
@@ -422,23 +470,32 @@ DB::table('notificaciones_procesadas')->insert([
 $wsInvocado = false;
 $tgInvocado = false;
 
-$wsStub = new class($wsInvocado) extends WhatsAppService {
-    public function __construct(private bool &$wsInvocado) {
+$wsStub = new class($wsInvocado) extends WhatsAppService
+{
+    public function __construct(private bool &$wsInvocado)
+    {
         parent::__construct();
     }
-    public function enviarAvisoAsistencia(string $telefono, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): bool {
+
+    public function enviarAvisoAsistenciaDetallado(string $telefono, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): array
+    {
         $this->wsInvocado = true;
-        throw new RuntimeException("ERROR: WhatsApp no debió ser llamado porque ya fue aceptado.");
+        throw new RuntimeException('ERROR: WhatsApp no debió ser llamado porque ya fue aceptado.');
     }
 };
 
-$tgStub = new class($tgInvocado) extends TelegramService {
-    public function __construct(private bool &$tgInvocado) {
+$tgStub = new class($tgInvocado) extends TelegramService
+{
+    public function __construct(private bool &$tgInvocado)
+    {
         parent::__construct();
     }
-    public function enviarAvisoAsistencia(string|int|null $chatId, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): bool {
+
+    public function enviarAvisoAsistenciaDetallado(string|int|null $chatId, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): array
+    {
         $this->tgInvocado = true;
-        return true;
+
+        return ['status' => 'Enviado a proveedor', 'success' => true];
     }
 };
 
@@ -453,6 +510,75 @@ assertConc($tgInvocado === true, 'Telegram SÍ fue reintentado y completado', $a
 assertConc($row5->estado === 'ACEPTADO_PROVEEDOR', 'Estado final de la notificación promovido a ACEPTADO_PROVEEDOR', $assertions);
 assertConc(($det5['whatsapp']['estado'] ?? '') === 'ACEPTADO_PROVEEDOR', 'Detalle de canal WhatsApp preserva ACEPTADO_PROVEEDOR', $assertions);
 assertConc(($det5['telegram']['estado'] ?? '') === 'ACEPTADO_PROVEEDOR', 'Detalle de canal Telegram actualizado a ACEPTADO_PROVEEDOR', $assertions);
+
+Schema::create('eventos', function (Blueprint $table): void {
+    $table->engine('InnoDB');
+    $table->id();
+    $table->string('nombre_evento');
+    $table->dateTime('fecha_hora');
+});
+Schema::create('registros_asistencia', function (Blueprint $table): void {
+    $table->engine('InnoDB');
+    $table->id();
+    $table->string('asistible_type');
+    $table->string('asistible_id');
+    $table->date('fecha');
+    $table->time('hora');
+    $table->foreignId('evento_id')->nullable()->constrained('eventos');
+    $table->index(['asistible_type', 'asistible_id']);
+});
+
+$eventoQr = Evento::create(['nombre_evento' => 'Evento QR sintético', 'fecha_hora' => Carbon::now()]);
+foreach (['con-evento' => $eventoQr->id, 'sin-evento' => null] as $caso => $eventoId) {
+    $matricula = 'QR-'.$caso;
+    Alumno::create(['matricula' => $matricula, 'nombre' => 'Alumno', 'apellido' => 'Sintético', 'activo' => true]);
+    Tutor::create(['matricula_alumno' => $matricula, 't1_nombre' => 'Tutor Sintético']);
+    $workers = [];
+
+    try {
+        DB::transaction(function () use ($matricula, $eventoId, &$workers, &$assertions): void {
+            Alumno::query()->whereKey($matricula)->lockForUpdate()->firstOrFail();
+
+            foreach ([1, 2] as $workerId) {
+                $worker = new Process([
+                    PHP_BINARY, __FILE__, '--child-qr', $matricula, (string) $eventoId,
+                    DestructiveTestGuard::CLI_AUTHORIZATION_FLAG,
+                ], dirname(__DIR__, 2), timeout: 25);
+                $workers[$workerId] = $worker;
+                $worker->start();
+            }
+
+            $limite = microtime(true) + 12;
+            do {
+                $listos = array_filter($workers, static fn (Process $worker): bool => str_contains($worker->getOutput(), 'QR_READY'));
+                if (count($listos) === 2) {
+                    break;
+                }
+                usleep(10000);
+            } while (microtime(true) < $limite);
+
+            assertConc(count($listos) === 2, 'Ambos escáneres alcanzaron el bloqueo de la misma persona', $assertions);
+        });
+
+        $estados = [];
+        $trabajos = 0;
+        foreach ($workers as $worker) {
+            assertConc($worker->wait() === 0, 'El proceso QR terminó correctamente', $assertions);
+            assertConc(preg_match('/^QR_RESULT (.+)$/m', $worker->getOutput(), $resultado) === 1, 'El proceso QR devolvió su resultado', $assertions);
+            $respuesta = json_decode($resultado[1], true, flags: JSON_THROW_ON_ERROR);
+            $estados[] = $respuesta['status'];
+            $trabajos += $respuesta['jobs'];
+        }
+        sort($estados);
+        assertConc($estados === ['success', 'warning'], "Un registro y un duplicado rechazado ({$caso})", $assertions);
+        assertConc(RegistroAsistencia::where('asistible_id', $matricula)->count() === 1, "Una sola asistencia persistida ({$caso})", $assertions);
+        assertConc($trabajos === 1, "Un solo trabajo de notificación ({$caso})", $assertions);
+    } finally {
+        foreach ($workers as $worker) {
+            $worker->stop();
+        }
+    }
+}
 
 echo "\n========================================================\n";
 echo "CONCURRENCIA REAL VERIFICADA: {$assertions} ASERCIONES APROBADAS\n";

@@ -8,12 +8,15 @@ use App\Models\Evento;
 use App\Models\Personal;
 use App\Models\RegistroAsistencia;
 use App\Models\Tutor;
+use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -136,8 +139,6 @@ class AsistenciaController extends Controller
         try {
             $nombreCompleto = '';
             $personaModel = null;
-            $fechaHoy = Carbon::today()->toDateString();
-            $horaActual = Carbon::now()->toTimeString();
 
             // Buscar según el rol especificado en la credencial de forma estrictamente aislada
             if ($rol === 'Alumno') {
@@ -182,49 +183,8 @@ class AsistenciaController extends Controller
                 ]);
             }
 
-            // Restricción estricta contra registros duplicados en el mismo evento
-            if ($eventoId !== null) {
-                $yaAsistioEvento = $personaModel->asistencias()
-                    ->where('evento_id', $eventoId)
-                    ->exists();
-
-                if ($yaAsistioEvento) {
-                    return response()->json([
-                        'status' => 'warning',
-                        'msg' => 'Asistencia ya registrada previamente para este evento escolar.',
-                        'persona' => $nombreCompleto,
-                    ]);
-                }
-            }
-
-            // Cooldown de 5 minutos para evitar duplicados accidentales
-            /** @var RegistroAsistencia|null $ultimoRegistro */
-            $ultimoRegistro = $personaModel->asistencias()
-                ->whereDate('fecha', $fechaHoy)
-                ->latest('id')
-                ->first();
-
-            if ($ultimoRegistro) {
-                try {
-                    $ultimoTiempo = Carbon::parse($fechaHoy.' '.$ultimoRegistro->hora);
-
-                    if (abs(Carbon::now()->diffInSeconds($ultimoTiempo)) < 300) {
-                        return response()->json([
-                            'status' => 'warning',
-                            'msg' => 'Pase registrado recientemente.',
-                            'persona' => $nombreCompleto,
-                        ]);
-                    }
-                } catch (\Exception $exTime) {
-                    Log::warning('Error calculando cooldown de asistencia: '.$exTime->getMessage());
-                }
-            }
-
             // Registrar la asistencia polimórfica (y conservar campos heredados condicionalmente para compatibilidad)
-            $asistenciaData = [
-                'fecha' => $fechaHoy,
-                'hora' => $horaActual,
-            ];
+            $asistenciaData = [];
 
             if (self::tieneColumnaAsistencia('modo_registro')) {
                 $asistenciaData['modo_registro'] = 'QR';
@@ -239,51 +199,103 @@ class AsistenciaController extends Controller
                 $asistenciaData['evento_id'] = $eventoId;
             }
 
-            DB::transaction(function () use ($personaModel, $asistenciaData, $rol, $eventoId): void {
-                if ($eventoId !== null && Evento::query()->whereKey($eventoId)->lockForUpdate()->first(['id']) === null) {
+            $resultadoRegistro = DB::transaction(function () use ($personaModel, $asistenciaData, $eventoId, $nombreCompleto): Carbon|JsonResponse {
+                // La fila de la persona existe aun cuando todavía no hay asistencias que bloquear.
+                $personaBloqueada = $personaModel->newQuery()->whereKey($personaModel->getKey())->lockForUpdate()->first();
+
+                if ($personaBloqueada === null) {
+                    return response()->json(['status' => 'error', 'msg' => 'El código no existe en el sistema']);
+                }
+
+                if (($personaBloqueada instanceof Alumno || $personaBloqueada instanceof Personal) && ! $personaBloqueada->activo) {
+                    return response()->json(['status' => 'error', 'msg' => 'La persona está inactiva o de baja']);
+                }
+
+                if ($eventoId !== null && Evento::query()->whereKey($eventoId)->sharedLock()->first(['id']) === null) {
                     throw ValidationException::withMessages(['evento_id' => 'El evento seleccionado ya no está disponible.']);
                 }
 
-                $personaModel->asistencias()->create($asistenciaData);
+                if ($eventoId !== null && $personaBloqueada->asistencias()->where('evento_id', $eventoId)->lockForUpdate()->first(['id']) !== null) {
+                    return response()->json([
+                        'status' => 'warning',
+                        'msg' => 'Asistencia ya registrada previamente para este evento escolar.',
+                        'persona' => $nombreCompleto,
+                    ]);
+                }
+
+                $momentoRegistro = Carbon::now();
+                $fechaHoy = $momentoRegistro->toDateString();
+                /** @var RegistroAsistencia|null $ultimoRegistro */
+                $ultimoRegistro = $personaBloqueada->asistencias()
+                    ->whereDate('fecha', $fechaHoy)
+                    ->latest('id')
+                    ->lockForUpdate()
+                    ->first(['hora']);
+
+                if ($ultimoRegistro) {
+                    try {
+                        $ultimoTiempo = Carbon::parse($fechaHoy.' '.$ultimoRegistro->hora);
+                        if (abs($momentoRegistro->diffInSeconds($ultimoTiempo)) < 300) {
+                            return response()->json([
+                                'status' => 'warning',
+                                'msg' => 'Pase registrado recientemente.',
+                                'persona' => $nombreCompleto,
+                            ]);
+                        }
+                    } catch (\Exception) {
+                        Log::warning('asistencia_cooldown_hora_invalida');
+                    }
+                }
+
+                $personaBloqueada->asistencias()->create([
+                    ...$asistenciaData,
+                    'fecha' => $fechaHoy,
+                    'hora' => $momentoRegistro->toTimeString(),
+                ]);
 
                 // Actualizar convocatoria explícita si la tabla existe
-                if ($rol === 'Tutor' && isset($asistenciaData['evento_id']) && Schema::hasTable('evento_convocatorias')) {
-                    $affected = DB::table('evento_convocatorias')
-                        ->where('evento_id', $asistenciaData['evento_id'])
-                        ->where('tutor_id', $personaModel->id)
-                        ->update([
-                            'asistio' => true,
-                            'fecha_asistencia' => Carbon::now(),
-                            'updated_at' => Carbon::now(),
-                        ]);
+                if ($personaBloqueada instanceof Tutor && $eventoId !== null && Schema::hasTable('evento_convocatorias')) {
+                    $convocatoria = DB::table('evento_convocatorias')
+                        ->where('evento_id', $eventoId)
+                        ->where('tutor_id', $personaBloqueada->id);
+                    $datosAsistencia = [
+                        'asistio' => true,
+                        'fecha_asistencia' => $momentoRegistro,
+                        'updated_at' => $momentoRegistro,
+                    ];
 
-                    if ($affected === 0) {
-                        // Tutor asistente no convocado previamente (walk-in): registrar para cálculo exacto
-                        DB::table('evento_convocatorias')->insertOrIgnore([
-                            'evento_id' => $asistenciaData['evento_id'],
-                            'tutor_id' => $personaModel->id,
-                            'alumno_matricula' => $personaModel->matricula_alumno,
+                    if ((clone $convocatoria)->lockForUpdate()->first(['id']) !== null) {
+                        $convocatoria->update($datosAsistencia);
+                    } else {
+                        DB::table('evento_convocatorias')->insert([
+                            'evento_id' => $eventoId,
+                            'tutor_id' => $personaBloqueada->id,
+                            'alumno_matricula' => $personaBloqueada->matricula_alumno,
                             'notificado' => false,
-                            'asistio' => true,
-                            'fecha_asistencia' => Carbon::now(),
-                            'created_at' => Carbon::now(),
-                            'updated_at' => Carbon::now(),
+                            'created_at' => $momentoRegistro,
+                            ...$datosAsistencia,
                         ]);
                     }
                 }
-            });
+
+                return $momentoRegistro;
+            }, 3);
+            if ($resultadoRegistro instanceof JsonResponse) {
+                return $resultadoRegistro;
+            }
 
             // =========== ALERTAS AUTOMÁTICAS (WHATSAPP + TELEGRAM) ===========
+            $horaFormateada = $resultadoRegistro->format('h:i A');
             if ($rol === 'Alumno' && isset($alumno) && $alumno->tutor) {
-                $horaFormateada = Carbon::now()->format('h:i A');
-                $tipoPase = Carbon::now()->hour < 13 ? 'ENTRADA' : 'SALIDA';
+                $tipoPase = $resultadoRegistro->hour < 13 ? 'ENTRADA' : 'SALIDA';
 
                 NotificarAsistenciaJob::dispatch(
                     $alumno,
                     $tipoPase,
                     $horaFormateada,
-                    $nombreCompleto
-                );
+                    $nombreCompleto,
+                    $resultadoRegistro->toDateString()
+                )->afterCommit();
 
                 $msgResponse = 'Asistencia registrada (notificación en cola)';
             } elseif ($rol === 'Tutor') {
@@ -300,7 +312,7 @@ class AsistenciaController extends Controller
                 'status' => 'success',
                 'msg' => $msgResponse,
                 'persona' => $nombreCompleto,
-                'hora' => Carbon::now()->format('h:i A'),
+                'hora' => $horaFormateada,
             ];
 
             if ($rol === 'Tutor' && ! empty($personaModel->nombres_alumnos)) {
@@ -312,7 +324,7 @@ class AsistenciaController extends Controller
         } catch (ValidationException $exception) {
             throw $exception;
         } catch (\Exception $e) {
-            Log::error('Error en procesarQr: '.$e->getMessage(), ['id' => (string) $idPersona]);
+            Log::error('asistencia_qr_registro_fallido', ['tipo' => $e::class]);
 
             return response()->json([
                 'status' => 'error',
@@ -324,22 +336,38 @@ class AsistenciaController extends Controller
     /**
      * Valida la contraseña del usuario para salir del modo Kiosco
      */
-    public function desbloquearKiosco(Request $request)
+    public function desbloquearKiosco(Request $request): JsonResponse
     {
         Gate::authorize('asistencia.escanear');
 
+        /** @var User $user */
+        $user = $request->user();
+        $limites = [
+            'kiosco:cuenta:'.$user->getAuthIdentifier() => 5,
+            'kiosco:origen:'.hash('sha256', (string) $request->ip()) => 20,
+        ];
+        foreach ($limites as $clave => $maximo) {
+            if (RateLimiter::tooManyAttempts($clave, $maximo)) {
+                return $this->desbloqueoLimitado($clave);
+            }
+        }
+        foreach ($limites as $clave => $maximo) {
+            $intentos = RateLimiter::increment($clave, 60);
+            if ($intentos < 1 || $intentos > $maximo) {
+                return $this->desbloqueoLimitado($clave);
+            }
+        }
+
         $password = $request->input('password');
 
-        if (empty($password)) {
+        if (! is_string($password) || $password === '') {
             return response()->json([
                 'status' => 'error',
                 'msg' => 'Contraseña vacía',
             ]);
         }
 
-        $user = auth()->user();
-
-        if ($user && Hash::check($password, $user->password)) {
+        if (Hash::check($password, $user->password)) {
             return response()->json([
                 'status' => 'success',
                 'destination' => $user->isOperador() ? 'logout' : 'dashboard',
@@ -350,5 +378,13 @@ class AsistenciaController extends Controller
             'status' => 'error',
             'msg' => 'Contraseña incorrecta',
         ]);
+    }
+
+    private function desbloqueoLimitado(string $clave): JsonResponse
+    {
+        return response()->json([
+            'status' => 'error',
+            'msg' => 'Demasiados intentos. Intente nuevamente más tarde.',
+        ], 429, ['Retry-After' => (string) max(1, RateLimiter::availableIn($clave))]);
     }
 }

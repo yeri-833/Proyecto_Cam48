@@ -2,9 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\Tutor;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class TelegramService
 {
@@ -24,29 +25,18 @@ class TelegramService
     }
 
     /**
-     * Enmascara el identificador de chat para proteger la privacidad en logs operativos (OWASP A03).
-     */
-    private function maskChatId(string|int|null $chatId): string
-    {
-        if (empty($chatId)) {
-            return '****';
-        }
-        $str = (string) $chatId;
-        $len = strlen($str);
-        if ($len <= 5) {
-            return '****';
-        }
-
-        return substr($str, 0, 3).'****'.substr($str, -2);
-    }
-
-    /**
      * Envía un aviso individual a un tutor por Telegram.
      */
     public function enviarAvisoAsistencia(string|int|null $chatId, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): bool
     {
+        return $this->enviarAvisoAsistenciaDetallado($chatId, $nombreAlumno, $hora, $tipo)['success'];
+    }
+
+    /** @return array{status: string, success: bool} */
+    public function enviarAvisoAsistenciaDetallado(string|int|null $chatId, string $nombreAlumno, string $hora, string $tipo = 'Pase de Lista'): array
+    {
         if (empty($chatId)) {
-            return false;
+            return ['status' => 'Fallido', 'success' => false];
         }
 
         $mensaje = "🏫 *CAM #48 - Control de Accesos*\n\n"
@@ -55,7 +45,7 @@ class TelegramService
                  ."📌 *Movimiento:* {$tipo}\n\n"
                  .'_Mensaje automático institucional._';
 
-        return $this->enviarMensaje($chatId, $mensaje);
+        return $this->enviarMensajeDetallado($chatId, $mensaje);
     }
 
     /**
@@ -82,6 +72,12 @@ class TelegramService
      */
     public function enviarAvisoEventoDirecto(string|int $chatId, string $nombreEvento, string $fecha, ?string $ubicacion): bool
     {
+        return $this->enviarAvisoEventoDirectoDetallado($chatId, $nombreEvento, $fecha, $ubicacion)['success'];
+    }
+
+    /** @return array{status: string, success: bool} */
+    public function enviarAvisoEventoDirectoDetallado(string|int $chatId, string $nombreEvento, string $fecha, ?string $ubicacion): array
+    {
         $mensaje = "📅 *CAM #48 - Notificación de Evento Escolar*\n\n"
                  ."Estimado tutor, le recordamos la próxima actividad escolar:\n\n"
                  ."📌 *Actividad:* {$nombreEvento}\n"
@@ -89,20 +85,16 @@ class TelegramService
                  .'📍 *Ubicación:* '.($ubicacion ?? 'Plantel escolar')."\n\n"
                  .'_Mensaje institucional automático._';
 
-        return $this->enviarMensaje($chatId, $mensaje);
+        return $this->enviarMensajeDetallado($chatId, $mensaje);
     }
 
     /**
-     * Envía mensaje con reporte estructurado de estado operativo y enmascaramiento de datos personales.
-     *
      * @return array{status: string, success: bool}
      */
     public function enviarMensajeDetallado(string|int $chatId, string $mensaje): array
     {
-        $destinatarioEnmascarado = $this->maskChatId($chatId);
-
         if ($this->modoSimulacion) {
-            Log::info("[Telegram] [SIMULADO] Notificación preparada para destinatario: {$destinatarioEnmascarado}. Longitud: ".strlen($mensaje).' caracteres.');
+            Log::info('[Telegram] Envío simulado.');
 
             return [
                 'status' => 'Simulado',
@@ -118,31 +110,32 @@ class TelegramService
                 'parse_mode' => 'Markdown',
             ]);
 
-            if ($response->successful()) {
-                Log::info("[Telegram] [ENVIADO_PROVEEDOR] Mensaje entregado exitosamente a {$destinatarioEnmascarado}");
+            $aceptado = $response->json('ok');
+            if ($response->successful() && $aceptado === true) {
+                Log::info('[Telegram] Envío aceptado por el proveedor.');
 
-                return [
-                    'status' => 'Enviado a proveedor',
-                    'success' => true,
-                ];
-            } else {
-                Log::error("[Telegram] [FALLIDO] Proveedor rechazó mensaje a {$destinatarioEnmascarado} (HTTP {$response->status()})");
-
-                return [
-                    'status' => 'Fallido',
-                    'success' => false,
-                ];
+                return ['status' => 'Enviado a proveedor', 'success' => true];
             }
-        } catch (\Throwable $exception) {
+
+            if (($response->clientError() && $response->status() !== 408)
+                || ($response->successful() && $aceptado === false)) {
+                Log::error('[TELEGRAM_SEND_FAILED] Envío rechazado.', ['http_status' => $response->status()]);
+
+                return ['status' => 'Fallido', 'success' => false];
+            }
+
+            Log::warning('[TELEGRAM_SEND_UNCERTAIN] Respuesta sin confirmación de envío.', ['http_status' => $response->status()]);
+        } catch (ConnectionException $exception) {
+            Log::warning('[TELEGRAM_SEND_UNCERTAIN] Conexión interrumpida, resultado del envío incierto.', ['exception_type' => $exception::class]);
+        } catch (Throwable $exception) {
             Log::error('[TELEGRAM_SEND_FAILED] No fue posible completar el envío de Telegram.', [
                 'exception_type' => $exception::class,
             ]);
 
-            return [
-                'status' => 'Fallido',
-                'success' => false,
-            ];
+            return ['status' => 'Fallido', 'success' => false];
         }
+
+        return ['status' => 'Incierto', 'success' => false];
     }
 
     /**
@@ -160,8 +153,14 @@ class TelegramService
      */
     public function enviarMensajeDirecto(string|int $chatId, string $nombreTutor, string $mensajeTexto): bool
     {
+        return $this->enviarMensajeDirectoDetallado($chatId, $nombreTutor, $mensajeTexto)['success'];
+    }
+
+    /** @return array{status: string, success: bool} */
+    public function enviarMensajeDirectoDetallado(string|int $chatId, string $nombreTutor, string $mensajeTexto): array
+    {
         if (empty($chatId)) {
-            return false;
+            return ['status' => 'Fallido', 'success' => false];
         }
 
         $mensaje = "🏫 *CAM #48 - Mensaje Directo Escolar*\n\n"
@@ -169,6 +168,6 @@ class TelegramService
                  ."{$mensajeTexto}\n\n"
                  .'_Atentamente, la Dirección Escolar._';
 
-        return $this->enviarMensaje($chatId, $mensaje);
+        return $this->enviarMensajeDetallado($chatId, $mensaje);
     }
 }

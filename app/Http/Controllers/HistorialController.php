@@ -6,10 +6,12 @@ use App\Models\Alumno;
 use App\Models\Personal;
 use App\Models\Tutor;
 use Carbon\Carbon;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
+use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class HistorialController extends Controller
@@ -29,14 +31,39 @@ class HistorialController extends Controller
         'Personal' => Personal::class,
     ];
 
+    /** @return array{string, string, string} */
+    private function filtros(Request $request): array
+    {
+        $fecha = $request->query('fecha') ?? Carbon::today()->toDateString();
+        $busqueda = $request->query('busqueda') ?? '';
+        $rol = $request->query('rol') ?? 'Todos';
+
+        if (! is_string($fecha) || ! is_string($busqueda) || ! is_string($rol)) {
+            abort(422);
+        }
+
+        return [$fecha, $busqueda, $rol];
+    }
+
+    private function consultaAsistenciasAutorizadas(string $fecha): Builder
+    {
+        $query = DB::table('registros_asistencia as r')->whereDate('r.fecha', $fecha);
+
+        if (Gate::denies('personal.consultar')) {
+            $query->whereIn('r.asistible_type', [Alumno::class, Tutor::class]);
+        }
+
+        return $query;
+    }
+
     /**
      * Base query usando el esquema polimórfico (asistible_type / asistible_id)
      * e integrando la relación de tutores con sus alumnos asociados.
      */
-    private function getBaseQuery(string $fecha, string $busqueda, string $rol)
+    private function getBaseQuery(string $fecha, string $busqueda, string $rol): Builder
     {
         // Unimos las tres tablas de personas según asistible_type y la relación tutor-alumno
-        $query = DB::table('registros_asistencia as r')
+        $query = $this->consultaAsistenciasAutorizadas($fecha)
             ->leftJoin('alumnos as a', function ($join) {
                 $join->on('r.asistible_id', '=', 'a.matricula')
                     ->where('r.asistible_type', '=', Alumno::class);
@@ -49,8 +76,7 @@ class HistorialController extends Controller
                 $join->on('r.asistible_id', '=', DB::raw('CAST(t.id AS CHAR)'))
                     ->where('r.asistible_type', '=', Tutor::class);
             })
-            ->leftJoin('alumnos as a_tutor', 't.matricula_alumno', '=', 'a_tutor.matricula')
-            ->whereDate('r.fecha', $fecha);
+            ->leftJoin('alumnos as a_tutor', 't.matricula_alumno', '=', 'a_tutor.matricula');
 
         // Filtro de rol
         if ($rol && $rol !== 'Todos' && isset(self::ROL_TO_TYPE[$rol])) {
@@ -115,19 +141,16 @@ class HistorialController extends Controller
     /**
      * Muestra el historial de asistencias (Pase de Lista) de un día específico.
      */
-    public function index(Request $request)
+    public function index(Request $request): Response
     {
         Gate::authorize('historial.consultar');
 
-        $fecha = $request->query('fecha', Carbon::today()->toDateString());
-        $busqueda = $request->query('busqueda', '');
-        $rol = $request->query('rol', 'Todos');
+        [$fecha, $busqueda, $rol] = $this->filtros($request);
 
         // ── Totales reales del día ──────────────────
-        $totalesRaw = DB::table('registros_asistencia')
-            ->whereDate('fecha', $fecha)
-            ->select('asistible_type', DB::raw('COUNT(*) as total'))
-            ->groupBy('asistible_type')
+        $totalesRaw = $this->consultaAsistenciasAutorizadas($fecha)
+            ->select('r.asistible_type', DB::raw('COUNT(*) as total'))
+            ->groupBy('r.asistible_type')
             ->get();
 
         $estadisticas = ['total' => 0, 'Alumno' => 0, 'Personal' => 0, 'Tutor' => 0];
@@ -180,13 +203,11 @@ class HistorialController extends Controller
     /**
      * Exporta el reporte de asistencias a CSV (Stream).
      */
-    public function exportar(Request $request)
+    public function exportar(Request $request): StreamedResponse
     {
         Gate::authorize('historial.exportar');
 
-        $fecha = $request->query('fecha', Carbon::today()->toDateString());
-        $busqueda = $request->query('busqueda', '');
-        $rol = $request->query('rol', 'Todos');
+        [$fecha, $busqueda, $rol] = $this->filtros($request);
 
         $query = $this->getBaseQuery($fecha, $busqueda, $rol);
         $nombreArchivo = "Reporte_Asistencias_{$fecha}.csv";

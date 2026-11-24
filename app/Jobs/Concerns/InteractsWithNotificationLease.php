@@ -3,9 +3,11 @@
 namespace App\Jobs\Concerns;
 
 use Carbon\Carbon;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 trait InteractsWithNotificationLease
 {
@@ -42,6 +44,7 @@ trait InteractsWithNotificationLease
      */
     protected static array $estadosCompletados = [
         self::ESTADO_ACEPTADO_PROVEEDOR,
+        self::ESTADO_INCIERTO,
         'ENTREGADO', // retrocompatibilidad histórica
     ];
 
@@ -174,7 +177,7 @@ trait InteractsWithNotificationLease
     protected function cargarCanalesPersistidos(?string $idempotencyKey = null): array
     {
         $key = $idempotencyKey ?? $this->activeIdempotencyKey;
-        if (! $key || ! Schema::hasTable('notificaciones_procesadas') || ! Schema::hasColumn('notificaciones_procesadas', 'detalle_canales')) {
+        if (! $key || ! Schema::hasTable('notificaciones_procesadas') || ! $this->tienePersistenciaPorCanal()) {
             $this->canalesPersistidos = [];
 
             return [];
@@ -291,15 +294,14 @@ trait InteractsWithNotificationLease
     }
 
     /**
-     * Registra o actualiza el resultado de un canal preservando inmutabilidad en entregas exitosas.
+     * Conserva la aceptación o incertidumbre de un canal aunque cambie su configuración.
      */
     protected function registrarResultadoCanal(string $canal, string $estado, ?string $error = null): void
     {
         $canalKey = strtolower(trim($canal));
         $previo = $this->canalesPersistidos[$canalKey] ?? null;
 
-        // INMUTABILIDAD: Si el canal ya fue aceptado previamente por el proveedor, nunca degradar a fallido
-        if ($previo !== null && in_array($previo['estado'], [self::CANAL_ACEPTADO, 'ENTREGADO', 'ENVIADO'], true)) {
+        if ($this->isCanalAceptado($canalKey) || $this->isCanalIncierto($canalKey)) {
             return;
         }
 
@@ -326,7 +328,7 @@ trait InteractsWithNotificationLease
     {
         $this->registrarResultadoCanal($canal, $estado, $error);
 
-        if (! $this->activeIdempotencyKey || ! Schema::hasTable('notificaciones_procesadas') || ! Schema::hasColumn('notificaciones_procesadas', 'detalle_canales')) {
+        if (! $this->activeIdempotencyKey || ! Schema::hasTable('notificaciones_procesadas') || ! $this->tienePersistenciaPorCanal()) {
             return;
         }
 
@@ -342,6 +344,37 @@ trait InteractsWithNotificationLease
             'detalle_canales' => json_encode($this->canalesPersistidos, JSON_UNESCAPED_UNICODE),
             'updated_at' => Carbon::now(),
         ]);
+    }
+
+    protected function tienePersistenciaPorCanal(): bool
+    {
+        return Schema::hasColumn('notificaciones_procesadas', 'detalle_canales');
+    }
+
+    /** @param callable(): array{status: string, success: bool} $enviar */
+    protected function procesarCanalProveedor(string $canal, callable $enviar): ?string
+    {
+        try {
+            $resultado = $enviar();
+            $estado = match (true) {
+                $resultado['status'] === 'Incierto' => self::CANAL_INCIERTO,
+                $resultado['success'] => self::CANAL_ACEPTADO,
+                default => self::CANAL_FALLIDO,
+            };
+        } catch (Throwable $exception) {
+            $estado = $exception instanceof ConnectionException || $this->esErrorIncierto($exception->getMessage())
+                ? self::CANAL_INCIERTO
+                : self::CANAL_FALLIDO;
+        }
+
+        $error = match ($estado) {
+            self::CANAL_INCIERTO => $canal.': resultado incierto del envío.',
+            self::CANAL_FALLIDO => $canal.': envío rechazado o no iniciado.',
+            default => null,
+        };
+        $this->registrarYPersistirCanal($canal, $estado, $error);
+
+        return $error;
     }
 
     /**
@@ -385,7 +418,7 @@ trait InteractsWithNotificationLease
 
         $now = Carbon::now();
         $hasOwnerCol = Schema::hasColumn('notificaciones_procesadas', 'owner_token');
-        $hasDetalleCol = Schema::hasColumn('notificaciones_procesadas', 'detalle_canales');
+        $hasDetalleCol = $this->tienePersistenciaPorCanal();
 
         $query = DB::table('notificaciones_procesadas')
             ->where('idempotency_key', $this->activeIdempotencyKey)
@@ -435,7 +468,7 @@ trait InteractsWithNotificationLease
 
         $now = Carbon::now();
         $hasOwnerCol = Schema::hasColumn('notificaciones_procesadas', 'owner_token');
-        $hasDetalleCol = Schema::hasColumn('notificaciones_procesadas', 'detalle_canales');
+        $hasDetalleCol = $this->tienePersistenciaPorCanal();
 
         $query = DB::table('notificaciones_procesadas')
             ->where('idempotency_key', $this->activeIdempotencyKey)
@@ -475,11 +508,7 @@ trait InteractsWithNotificationLease
         $updated = $query->update($updateData);
 
         if ($updated === 0) {
-            Log::warning('[NotificationLease] El worker perdió la propiedad del lease antes de finalizar.', [
-                'idempotency_key' => $this->activeIdempotencyKey,
-                'owner_token' => $this->activeOwnerToken,
-                'estado_intentado' => $estadoFinal,
-            ]);
+            Log::warning('[NotificationLease] El worker perdió la propiedad del lease antes de finalizar.', ['estado_intentado' => $estadoFinal]);
 
             return false;
         }
@@ -500,7 +529,7 @@ trait InteractsWithNotificationLease
 
         $now = Carbon::now();
         $hasOwnerCol = Schema::hasColumn('notificaciones_procesadas', 'owner_token');
-        $hasDetalleCol = Schema::hasColumn('notificaciones_procesadas', 'detalle_canales');
+        $hasDetalleCol = $this->tienePersistenciaPorCanal();
 
         $query = DB::table('notificaciones_procesadas')
             ->where('idempotency_key', $this->activeIdempotencyKey)
@@ -539,7 +568,7 @@ trait InteractsWithNotificationLease
     /**
      * Manejo seguro de fallo terminal en `failed()` preservando canales aceptados y evitando sobreescrituras indebidas.
      */
-    protected function handleTerminalFailure(string $idempotencyKey, ?\Throwable $exception = null, int $tries = 3): void
+    protected function handleTerminalFailure(string $idempotencyKey, ?Throwable $exception = null, int $tries = 3): void
     {
         if (! Schema::hasTable('notificaciones_procesadas')) {
             return;
@@ -547,8 +576,8 @@ trait InteractsWithNotificationLease
 
         $now = Carbon::now();
         $hasOwnerCol = Schema::hasColumn('notificaciones_procesadas', 'owner_token');
-        $hasDetalleCol = Schema::hasColumn('notificaciones_procesadas', 'detalle_canales');
-        $mensajeError = 'Agotados los '.$tries.' intentos: '.($exception ? substr($exception->getMessage(), 0, 400) : 'Error desconocido');
+        $hasDetalleCol = $this->tienePersistenciaPorCanal();
+        $mensajeError = 'Agotados los '.$tries.' intentos: '.($exception ? $exception::class : 'Error desconocido');
 
         // Cargar estado persistido previo para determinar si hubo entregas parciales
         $actual = DB::table('notificaciones_procesadas')
@@ -560,15 +589,16 @@ trait InteractsWithNotificationLease
         }
 
         $canales = $hasDetalleCol ? $this->parsearDetalleCanales($actual->detalle_canales ?? null) : [];
-        $huboCanalAceptado = false;
-        foreach ($canales as $c) {
-            if (in_array($c['estado'], [self::CANAL_ACEPTADO, 'ENTREGADO', 'ENVIADO'], true)) {
-                $huboCanalAceptado = true;
-                break;
-            }
-        }
+        $estadosCanales = array_column($canales, 'estado');
+        $huboCanalAceptado = array_intersect($estadosCanales, [self::CANAL_ACEPTADO, 'ENTREGADO', 'ENVIADO']) !== [];
+        $huboCanalIncierto = in_array(self::CANAL_INCIERTO, $estadosCanales, true);
+        $huboCanalFallido = in_array(self::CANAL_FALLIDO, $estadosCanales, true);
 
-        $estadoTerminal = $huboCanalAceptado ? self::ESTADO_PARCIAL : self::ESTADO_FALLIDO;
+        $estadoTerminal = match (true) {
+            $huboCanalAceptado, $huboCanalIncierto && $huboCanalFallido => self::ESTADO_PARCIAL,
+            $huboCanalIncierto => self::ESTADO_INCIERTO,
+            default => self::ESTADO_FALLIDO,
+        };
 
         $query = DB::table('notificaciones_procesadas')
             ->where('idempotency_key', $idempotencyKey)

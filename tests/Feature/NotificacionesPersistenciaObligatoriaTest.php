@@ -21,7 +21,9 @@ use Tests\TestCase;
 class NotificacionesPersistenciaObligatoriaTest extends TestCase
 {
     private Personal $personal;
+
     private Alumno $alumno;
+
     private Tutor $tutor;
 
     protected function setUp(): void
@@ -58,7 +60,7 @@ class NotificacionesPersistenciaObligatoriaTest extends TestCase
         Schema::dropIfExists('notificaciones_procesadas');
 
         $telegramMock = Mockery::mock(TelegramService::class);
-        $telegramMock->shouldNotReceive('enviarMensajeDirecto');
+        $telegramMock->shouldNotReceive('enviarMensajeDirectoDetallado');
 
         $job = new NotificarAvisoPersonalJob($this->personal, 'Mensaje sin tabla', 'idemp_key_sin_tabla_pers');
 
@@ -73,10 +75,10 @@ class NotificacionesPersistenciaObligatoriaTest extends TestCase
         Schema::dropIfExists('notificaciones_procesadas');
 
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldNotReceive('enviarAvisoAsistencia');
+        $wsMock->shouldNotReceive('enviarAvisoAsistenciaDetallado');
 
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldNotReceive('enviarAvisoAsistencia');
+        $tgMock->shouldNotReceive('enviarAvisoAsistenciaDetallado');
 
         $job = new NotificarAsistenciaJob($this->alumno, 'ENTRADA', '08:00 AM', 'Estudiante Persistencia');
 
@@ -91,10 +93,10 @@ class NotificacionesPersistenciaObligatoriaTest extends TestCase
         Schema::dropIfExists('notificaciones_procesadas');
 
         $wsMock = Mockery::mock(WhatsAppService::class);
-        $wsMock->shouldNotReceive('enviarMensajeDirecto');
+        $wsMock->shouldNotReceive('enviarMensajeDirectoDetallado');
 
         $tgMock = Mockery::mock(TelegramService::class);
-        $tgMock->shouldNotReceive('enviarAvisoEventoDirecto');
+        $tgMock->shouldNotReceive('enviarAvisoEventoDirectoDetallado');
 
         Mail::fake();
 
@@ -128,7 +130,7 @@ class NotificacionesPersistenciaObligatoriaTest extends TestCase
         ]);
 
         $telegramMock = Mockery::mock(TelegramService::class);
-        $telegramMock->shouldNotReceive('enviarMensajeDirecto');
+        $telegramMock->shouldNotReceive('enviarMensajeDirectoDetallado');
 
         $job = new NotificarAvisoPersonalJob($this->personal, 'Mensaje repetido', $idempKey);
         $job->handle($telegramMock);

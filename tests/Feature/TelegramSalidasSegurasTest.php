@@ -105,8 +105,13 @@ class TelegramSalidasSegurasTest extends TestCase
         $resultado = (new TelegramService)->enviarMensajeDetallado(self::ChatId, 'Mensaje ficticio');
 
         $this->assertFalse($resultado['success']);
-        $this->assertSame('Fallido', $resultado['status']);
-        $this->assertLogSeguro('TELEGRAM_SEND_FAILED');
+        if ($tipo === 'conexion') {
+            $this->assertSame('Incierto', $resultado['status']);
+            $this->assertLogSeguro('TELEGRAM_SEND_UNCERTAIN', 'warning');
+        } else {
+            $this->assertSame('Fallido', $resultado['status']);
+            $this->assertLogSeguro('TELEGRAM_SEND_FAILED');
+        }
     }
 
     #[DataProvider('fallosSinteticos')]
@@ -196,9 +201,9 @@ class TelegramSalidasSegurasTest extends TestCase
         };
     }
 
-    private function assertLogSeguro(string $codigo): void
+    private function assertLogSeguro(string $codigo, string $nivel = 'error'): void
     {
-        Log::shouldHaveReceived('error')->once()->withArgs(function (string $mensaje, array $contexto) use ($codigo): bool {
+        Log::shouldHaveReceived($nivel)->once()->withArgs(function (string $mensaje, array $contexto) use ($codigo): bool {
             $this->assertStringContainsString($codigo, $mensaje);
             $this->assertTextoSeguro($mensaje.' '.json_encode($contexto));
 

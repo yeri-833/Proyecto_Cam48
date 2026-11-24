@@ -192,17 +192,13 @@ class TutorController extends Controller
         return redirect()->back()->with('success', 'Vínculo tutor-alumno removido.');
     }
 
-    /**
-     * Elimina el vínculo de un tutor
-     */
-    public function destroy($id)
+    public function destroy(string $id): never
     {
         Gate::authorize('tutores.eliminar');
 
-        $tutor = Tutor::findOrFail($id);
-        $tutor->delete();
+        Tutor::findOrFail($id);
 
-        return redirect()->route('tutores.index')->with('success', 'Registro del tutor eliminado correctamente.');
+        abort(409, 'Eliminación de tutor pendiente de habilitar un historial persistente de auditoría.');
     }
 
     /**
